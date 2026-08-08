@@ -6,7 +6,7 @@ import { Search, ArrowRight, ExternalLink, Loader2, Filter } from "lucide-react"
 import { CATEGORIES, getCategory } from "@/lib/categories";
 import { webSearch } from "@/lib/search.functions";
 
-type SearchParams = { q: string; cat?: string; site?: string };
+type SearchParams = { q: string; cat?: string | undefined; site?: string | undefined };
 
 export const Route = createFileRoute("/search")({
   validateSearch: (search: Record<string, unknown>): SearchParams => ({
@@ -54,7 +54,7 @@ function SearchPage() {
   const go = (next: Partial<SearchParams>) =>
     navigate({
       to: "/search",
-      search: (prev) => ({ ...prev, ...next }) as SearchParams,
+      search: (prev: SearchParams) => ({ ...prev, ...next }) as SearchParams,
     });
 
   return (
