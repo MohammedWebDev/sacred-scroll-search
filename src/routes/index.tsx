@@ -6,7 +6,6 @@ import {
   ExternalLink,
   History,
   X,
-  Filter,
 } from "lucide-react";
 import pattern from "@/assets/pattern.jpg";
 import { CATEGORIES } from "@/lib/categories";
@@ -18,7 +17,7 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "متصفح إسلامي حديث يعتمد على محرك بحث جوجل للبحث المرتب في القرآن الكريم والأحاديث النبوية والسور وآثار السلف من مصادر موثوقة.",
+          "متصفح إسلامي حديث للبحث المرتب في القرآن الكريم والأحاديث النبوية والسور وآثار السلف من مصادر موثوقة.",
       },
       { property: "og:title", content: "نور — بحث إسلامي مرتّب وسهل" },
       {
@@ -37,7 +36,6 @@ const STORAGE_KEY = "noor-recent-searches";
 function Index() {
   const [active, setActive] = useState(CATEGORIES[0]!);
   const [query, setQuery] = useState("");
-  const [site, setSite] = useState<string | null>(null);
   const [recent, setRecent] = useState<string[]>([]);
 
   useEffect(() => {
@@ -48,10 +46,6 @@ function Index() {
       /* ignore */
     }
   }, []);
-
-  useEffect(() => {
-    setSite(null);
-  }, [active]);
 
   const navigate = useNavigate();
 
@@ -65,7 +59,7 @@ function Index() {
     } catch {
       /* ignore */
     }
-    navigate({ to: "/search", search: { q, cat: active.id, site: site ?? undefined } });
+    navigate({ to: "/search", search: { q, cat: active.id } });
   };
 
   return (
@@ -95,7 +89,7 @@ function Index() {
             ابحث في الآيات والأحاديث والسور والآثار
           </h1>
           <p className="mt-3 text-sm text-primary-foreground/70 sm:text-base">
-            نتائج مرتّبة من مصادر إسلامية موثوقة فقط، لتسهيل الوصول للمعلومة على كل مسلم.
+            نتائج تُعرض داخل الموقع مباشرة من مصادر موثوقة، لتسهيل الوصول للمعلومة على كل مسلم.
           </p>
 
           <form
@@ -155,37 +149,6 @@ function Index() {
       </div>
 
       <main className="mx-auto max-w-5xl px-5 py-10">
-        <section>
-          <h2 className="flex items-center gap-2 font-display text-xl text-foreground">
-            <Filter className="size-4 text-primary" /> تحديد المصدر
-          </h2>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              onClick={() => setSite(null)}
-              className={`rounded-lg border px-3 py-1.5 text-sm transition ${
-                site === null
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-card text-muted-foreground hover:border-primary/40"
-              }`}
-            >
-              كل المصادر الموثوقة
-            </button>
-            {active.sites.map((s) => (
-              <button
-                key={s.domain}
-                onClick={() => setSite(s.domain)}
-                className={`rounded-lg border px-3 py-1.5 text-sm transition ${
-                  site === s.domain
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-card text-muted-foreground hover:border-primary/40"
-                }`}
-              >
-                {s.name}
-              </button>
-            ))}
-          </div>
-        </section>
-
         <section className="mt-9">
           <h2 className="font-display text-xl text-foreground">بحث سريع في {active.label}</h2>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

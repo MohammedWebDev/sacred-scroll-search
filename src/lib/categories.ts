@@ -5,7 +5,7 @@ export type Category = {
   label: string;
   hint: string;
   icon: typeof BookOpen;
-  sites: { name: string; domain: string }[];
+  filters: { name: string; value: string }[];
   suggestions: string[];
 };
 
@@ -13,26 +13,21 @@ export const CATEGORIES: Category[] = [
   {
     id: "ayat",
     label: "الآيات",
-    hint: "ابحث عن آية أو معنى في القرآن الكريم",
+    hint: "ابحث عن كلمة أو جزء من آية",
     icon: BookOpen,
-    sites: [
-      { name: "القرآن الكريم", domain: "quran.com" },
-      { name: "تنزيل", domain: "tanzil.net" },
-      { name: "التفسير", domain: "altafsir.com" },
-      { name: "الباحث القرآني", domain: "tafsir.app" },
-    ],
+    filters: [],
     suggestions: ["آية الكرسي", "آيات الصبر", "الرزق", "بر الوالدين", "التوبة والاستغفار"],
   },
   {
     id: "hadith",
     label: "الأحاديث",
-    hint: "ابحث في كتب السنة مع بيان درجة الحديث",
+    hint: "ابحث في نصوص كتب السنة مع بيان درجة الحديث",
     icon: ScrollText,
-    sites: [
-      { name: "سنة", domain: "sunnah.com" },
-      { name: "الدرر السنية", domain: "dorar.net" },
-      { name: "إسلام ويب", domain: "islamweb.net" },
-      { name: "الشاملة", domain: "shamela.ws" },
+    filters: [
+      { name: "صحيح البخاري", value: "bukhari" },
+      { name: "صحيح مسلم", value: "muslim" },
+      { name: "سنن أبي داود", value: "abudawud" },
+      { name: "سنن الترمذي", value: "tirmidhi" },
     ],
     suggestions: [
       "إنما الأعمال بالنيات",
@@ -45,25 +40,21 @@ export const CATEGORIES: Category[] = [
   {
     id: "surah",
     label: "السور",
-    hint: "اقرأ سورة كاملة مع التفسير والتلاوة",
+    hint: "اكتب اسم السورة أو رقمها",
     icon: Library,
-    sites: [
-      { name: "القرآن الكريم", domain: "quran.com" },
-      { name: "الباحث القرآني", domain: "tafsir.app" },
-      { name: "تنزيل", domain: "tanzil.net" },
-    ],
+    filters: [],
     suggestions: ["سورة الكهف", "سورة يس", "سورة الملك", "سورة الرحمن", "سورة البقرة"],
   },
   {
     id: "athar",
     label: "الآثار",
-    hint: "أقوال الصحابة والتابعين وسلف الأمة",
+    hint: "ابحث في نصوص الآثار والمرويات",
     icon: Feather,
-    sites: [
-      { name: "الدرر السنية", domain: "dorar.net" },
-      { name: "الشاملة", domain: "shamela.ws" },
-      { name: "الألوكة", domain: "alukah.net" },
-      { name: "إسلام ويب", domain: "islamweb.net" },
+    filters: [
+      { name: "صحيح البخاري", value: "bukhari" },
+      { name: "صحيح مسلم", value: "muslim" },
+      { name: "سنن أبي داود", value: "abudawud" },
+      { name: "سنن الترمذي", value: "tirmidhi" },
     ],
     suggestions: [
       "أثر عن عمر بن الخطاب",

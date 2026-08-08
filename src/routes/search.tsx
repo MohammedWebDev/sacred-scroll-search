@@ -6,13 +6,13 @@ import { Search, ArrowRight, ExternalLink, Loader2, Filter } from "lucide-react"
 import { CATEGORIES, getCategory } from "@/lib/categories";
 import { webSearch } from "@/lib/search.functions";
 
-type SearchParams = { q: string; cat?: string | undefined; site?: string | undefined };
+type SearchParams = { q: string; cat?: string | undefined; book?: string | undefined };
 
 export const Route = createFileRoute("/search")({
   validateSearch: (search: Record<string, unknown>): SearchParams => ({
     q: String(search["q"] ?? ""),
     cat: search["cat"] ? String(search["cat"]) : undefined,
-    site: search["site"] ? String(search["site"]) : undefined,
+    book: search["book"] ? String(search["book"]) : undefined,
   }),
   head: () => ({
     meta: [
@@ -34,19 +34,18 @@ export const Route = createFileRoute("/search")({
 });
 
 function SearchPage() {
-  const { q, cat, site } = Route.useSearch();
+  const { q, cat, book } = Route.useSearch();
   const navigate = useNavigate();
   const category = getCategory(cat);
   const [term, setTerm] = useState(q);
 
   useEffect(() => setTerm(q), [q]);
 
-  const sites = site ? [site] : category.sites.map((s) => s.domain);
   const runSearch = useServerFn(webSearch);
 
   const { data, isFetching } = useQuery({
-    queryKey: ["search", q, category.id, site ?? "all"],
-    queryFn: () => runSearch({ data: { query: q, sites } }),
+    queryKey: ["search", q, category.id, book ?? "all"],
+    queryFn: () => runSearch({ data: { query: q, category: category.id, book } }),
     enabled: q.trim().length > 0,
     staleTime: 5 * 60 * 1000,
   });
@@ -99,7 +98,7 @@ function SearchPage() {
               return (
                 <button
                   key={c.id}
-                  onClick={() => go({ cat: c.id, site: undefined })}
+                  onClick={() => go({ cat: c.id, book: undefined })}
                   className={`flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs transition ${
                     on
                       ? "border-primary bg-primary text-primary-foreground"
@@ -116,32 +115,34 @@ function SearchPage() {
       </header>
 
       <main className="mx-auto max-w-4xl px-4 py-6">
-        <div className="flex flex-wrap items-center gap-2">
-          <Filter className="size-3.5 text-primary" />
-          <button
-            onClick={() => go({ site: undefined })}
-            className={`rounded-lg border px-2.5 py-1 text-xs transition ${
-              !site
-                ? "border-gold bg-gold text-gold-foreground"
-                : "border-border text-muted-foreground"
-            }`}
-          >
-            كل المصادر
-          </button>
-          {category.sites.map((s) => (
+        {category.filters.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Filter className="size-3.5 text-primary" />
             <button
-              key={s.domain}
-              onClick={() => go({ site: s.domain })}
+              onClick={() => go({ book: undefined })}
               className={`rounded-lg border px-2.5 py-1 text-xs transition ${
-                site === s.domain
+                !book
                   ? "border-gold bg-gold text-gold-foreground"
                   : "border-border text-muted-foreground"
               }`}
             >
-              {s.name}
+              كل الكتب
             </button>
-          ))}
-        </div>
+            {category.filters.map((f) => (
+              <button
+                key={f.value}
+                onClick={() => go({ book: f.value })}
+                className={`rounded-lg border px-2.5 py-1 text-xs transition ${
+                  book === f.value
+                    ? "border-gold bg-gold text-gold-foreground"
+                    : "border-border text-muted-foreground"
+                }`}
+              >
+                {f.name}
+              </button>
+            ))}
+          </div>
+        )}
 
         {isFetching && (
           <div className="mt-10 flex items-center justify-center gap-2 text-muted-foreground">
