@@ -1,17 +1,14 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import {
   Search,
   BookOpen,
-  ScrollText,
-  Library,
-  Feather,
   ExternalLink,
   History,
   X,
-  Filter,
 } from "lucide-react";
 import pattern from "@/assets/pattern.jpg";
+import { CATEGORIES } from "@/lib/categories";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -20,12 +17,12 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "متصفح إسلامي حديث يعتمد على محرك بحث جوجل للبحث المرتب في القرآن الكريم والأحاديث النبوية والسور وآثار السلف من مصادر موثوقة.",
+          "متصفح إسلامي حديث للبحث المرتب في القرآن الكريم والأحاديث النبوية والسور وآثار السلف من مصادر موثوقة.",
       },
       { property: "og:title", content: "نور — بحث إسلامي مرتّب وسهل" },
       {
         property: "og:description",
-        content: "ابحث في الآيات والأحاديث والسور والآثار عبر مصادر موثوقة بنقرة واحدة.",
+        content: "ابحث في الآيات والأحاديث والسور والآثار وشاهد النتائج داخل الموقع مباشرة.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -34,75 +31,11 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-type Category = {
-  id: string;
-  label: string;
-  hint: string;
-  icon: typeof BookOpen;
-  sites: { name: string; domain: string }[];
-  suggestions: string[];
-};
-
-const CATEGORIES: Category[] = [
-  {
-    id: "ayat",
-    label: "الآيات",
-    hint: "ابحث عن آية أو معنى في القرآن الكريم",
-    icon: BookOpen,
-    sites: [
-      { name: "القرآن الكريم", domain: "quran.com" },
-      { name: "تنزيل", domain: "tanzil.net" },
-      { name: "التفسير", domain: "altafsir.com" },
-      { name: "الباحث القرآني", domain: "tafsir.app" },
-    ],
-    suggestions: ["آية الكرسي", "آيات الصبر", "الرزق", "بر الوالدين", "التوبة والاستغفار"],
-  },
-  {
-    id: "hadith",
-    label: "الأحاديث",
-    hint: "ابحث في كتب السنة مع بيان درجة الحديث",
-    icon: ScrollText,
-    sites: [
-      { name: "سنة", domain: "sunnah.com" },
-      { name: "الدرر السنية", domain: "dorar.net" },
-      { name: "إسلام ويب", domain: "islamweb.net" },
-      { name: "الشاملة", domain: "shamela.ws" },
-    ],
-    suggestions: ["إنما الأعمال بالنيات", "فضل الصلاة", "حسن الخلق", "صيام عاشوراء", "الأربعون النووية"],
-  },
-  {
-    id: "surah",
-    label: "السور",
-    hint: "اقرأ سورة كاملة مع التفسير والتلاوة",
-    icon: Library,
-    sites: [
-      { name: "القرآن الكريم", domain: "quran.com" },
-      { name: "الباحث القرآني", domain: "tafsir.app" },
-      { name: "تنزيل", domain: "tanzil.net" },
-    ],
-    suggestions: ["سورة الكهف", "سورة يس", "سورة الملك", "سورة الرحمن", "سورة البقرة"],
-  },
-  {
-    id: "athar",
-    label: "الآثار",
-    hint: "أقوال الصحابة والتابعين وسلف الأمة",
-    icon: Feather,
-    sites: [
-      { name: "الدرر السنية", domain: "dorar.net" },
-      { name: "الشاملة", domain: "shamela.ws" },
-      { name: "الألوكة", domain: "alukah.net" },
-      { name: "إسلام ويب", domain: "islamweb.net" },
-    ],
-    suggestions: ["أثر عن عمر بن الخطاب", "أقوال الحسن البصري", "آثار السلف في الزهد", "قول ابن مسعود"],
-  },
-];
-
 const STORAGE_KEY = "noor-recent-searches";
 
 function Index() {
   const [active, setActive] = useState(CATEGORIES[0]!);
   const [query, setQuery] = useState("");
-  const [site, setSite] = useState<string | null>(null);
   const [recent, setRecent] = useState<string[]>([]);
 
   useEffect(() => {
@@ -114,20 +47,11 @@ function Index() {
     }
   }, []);
 
-  useEffect(() => {
-    setSite(null);
-  }, [active]);
-
-  const targets = useMemo(
-    () => (site ? [site] : active.sites.map((s) => s.domain)),
-    [site, active],
-  );
+  const navigate = useNavigate();
 
   const run = (term: string) => {
     const q = term.trim();
     if (!q) return;
-    const scope = targets.map((d) => `site:${d}`).join(" OR ");
-    const url = `https://www.google.com/search?q=${encodeURIComponent(`${q} (${scope})`)}`;
     const next = [q, ...recent.filter((r) => r !== q)].slice(0, 8);
     setRecent(next);
     try {
@@ -135,7 +59,7 @@ function Index() {
     } catch {
       /* ignore */
     }
-    window.open(url, "_blank", "noopener,noreferrer");
+    navigate({ to: "/search", search: { q, cat: active.id } });
   };
 
   return (
@@ -156,7 +80,7 @@ function Index() {
             <span className="font-display text-2xl text-primary-foreground">نـور</span>
           </div>
           <span className="rounded-full border border-gold/30 px-3 py-1 text-xs text-gold">
-            بحث مدعوم بجوجل
+            نتائج داخل الموقع
           </span>
         </header>
 
@@ -165,7 +89,7 @@ function Index() {
             ابحث في الآيات والأحاديث والسور والآثار
           </h1>
           <p className="mt-3 text-sm text-primary-foreground/70 sm:text-base">
-            نتائج مرتّبة من مصادر إسلامية موثوقة فقط، لتسهيل الوصول للمعلومة على كل مسلم.
+            نتائج تُعرض داخل الموقع مباشرة من مصادر موثوقة، لتسهيل الوصول للمعلومة على كل مسلم.
           </p>
 
           <form
@@ -225,37 +149,6 @@ function Index() {
       </div>
 
       <main className="mx-auto max-w-5xl px-5 py-10">
-        <section>
-          <h2 className="flex items-center gap-2 font-display text-xl text-foreground">
-            <Filter className="size-4 text-primary" /> تحديد المصدر
-          </h2>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              onClick={() => setSite(null)}
-              className={`rounded-lg border px-3 py-1.5 text-sm transition ${
-                site === null
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-card text-muted-foreground hover:border-primary/40"
-              }`}
-            >
-              كل المصادر الموثوقة
-            </button>
-            {active.sites.map((s) => (
-              <button
-                key={s.domain}
-                onClick={() => setSite(s.domain)}
-                className={`rounded-lg border px-3 py-1.5 text-sm transition ${
-                  site === s.domain
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-card text-muted-foreground hover:border-primary/40"
-                }`}
-              >
-                {s.name}
-              </button>
-            ))}
-          </div>
-        </section>
-
         <section className="mt-9">
           <h2 className="font-display text-xl text-foreground">بحث سريع في {active.label}</h2>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -297,7 +190,7 @@ function Index() {
 
       <footer className="border-t border-border bg-card">
         <div className="mx-auto max-w-5xl px-5 py-6 text-center text-sm text-muted-foreground">
-          نتائج البحث تُعرض عبر جوجل مقيّدة بمواقع إسلامية موثوقة. تحقّق دائمًا من صحة الحديث ودرجته.
+          تُعرض النتائج داخل الموقع من مصادر موثوقة (القرآن الكريم وكتب السنة). تحقّق دائمًا من درجة الحديث.
         </div>
       </footer>
     </div>
