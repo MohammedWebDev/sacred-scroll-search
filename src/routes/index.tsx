@@ -22,7 +22,7 @@ export const Route = createFileRoute("/")({
       { property: "og:title", content: "نور — بحث إسلامي مرتّب وسهل" },
       {
         property: "og:description",
-        content: "ابحث في الآيات والأحاديث والسور والآثار عبر مصادر موثوقة بنقرة واحدة.",
+        content: "ابحث في الآيات والأحاديث والسور والآثار وشاهد النتائج داخل الموقع مباشرة.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -190,7 +190,7 @@ function Index() {
 
       <footer className="border-t border-border bg-card">
         <div className="mx-auto max-w-5xl px-5 py-6 text-center text-sm text-muted-foreground">
-          نتائج البحث تُعرض عبر جوجل مقيّدة بمواقع إسلامية موثوقة. تحقّق دائمًا من صحة الحديث ودرجته.
+          تُعرض النتائج داخل الموقع من مصادر موثوقة (القرآن الكريم وكتب السنة). تحقّق دائمًا من درجة الحديث.
         </div>
       </footer>
     </div>
