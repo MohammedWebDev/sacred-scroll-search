@@ -64,7 +64,7 @@ function SearchPage() {
   const go = (next: Partial<SearchParams>) =>
     navigate({
       to: "/search",
-      search: (prev) => ({ ...prev, q: prev.q ?? q, ...next }) as SearchParams,
+      search: (prev: Partial<SearchParams>) => ({ ...prev, q: prev.q ?? q, ...next }) as SearchParams,
     });
 
   return (
