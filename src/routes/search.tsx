@@ -2,9 +2,12 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Search, ArrowRight, ExternalLink, Loader2, Filter } from "lucide-react";
+import { Search, ArrowRight, Loader2, Filter, Moon, Sun } from "lucide-react";
 import { CATEGORIES, getCategory } from "@/lib/categories";
 import { webSearch } from "@/lib/search.functions";
+import { ResultCard } from "@/components/ResultCard";
+import { useTheme } from "@/lib/theme";
+import { bumpStats } from "@/lib/stats";
 
 type SearchParams = { q: string; cat?: string | undefined; book?: string | undefined };
 
@@ -16,12 +19,12 @@ export const Route = createFileRoute("/search")({
   }),
   head: () => ({
     meta: [
-      { title: "نتائج البحث — نور للبحث في الآيات والأحاديث" },
+      { title: "نتائج البحث — متصفح رقيم" },
       {
         name: "description",
-        content: "نتائج بحث مرتّبة من مصادر إسلامية موثوقة في الآيات والأحاديث والسور والآثار.",
+        content: "نتائج بحث ذكية ومرتّبة في الآيات والأحاديث والسور والآثار من مصادر موثوقة.",
       },
-      { property: "og:title", content: "نتائج البحث — نور" },
+      { property: "og:title", content: "نتائج البحث — متصفح رقيم" },
       {
         property: "og:description",
         content: "استعرض نتائج البحث الإسلامي داخل الموقع دون مغادرة الصفحة.",
@@ -38,6 +41,7 @@ function SearchPage() {
   const navigate = useNavigate();
   const category = getCategory(cat);
   const [term, setTerm] = useState(q);
+  const { theme, toggle } = useTheme();
 
   useEffect(() => setTerm(q), [q]);
 
@@ -45,22 +49,29 @@ function SearchPage() {
 
   const { data, isFetching } = useQuery({
     queryKey: ["search", q, category.id, book ?? "all"],
-    queryFn: () => runSearch({ data: { query: q, category: category.id, book } }),
+    queryFn: () =>
+      runSearch({
+        data: { query: q, category: category.id, ...(book ? { book } : {}) },
+      }),
     enabled: q.trim().length > 0,
     staleTime: 5 * 60 * 1000,
   });
 
+  useEffect(() => {
+    if (data) bumpStats({ searches: 1, results: data.results.length });
+  }, [data]);
+
   const go = (next: Partial<SearchParams>) =>
     navigate({
       to: "/search",
-      search: (prev: SearchParams) => ({ ...prev, ...next }) as SearchParams,
+      search: (prev) => ({ ...prev, q: prev.q ?? q, ...next }) as SearchParams,
     });
 
   return (
     <div dir="rtl" className="min-h-screen bg-background font-sans">
       <header className="sticky top-0 z-10 border-b border-border bg-card/95 backdrop-blur">
         <div className="mx-auto max-w-4xl px-4 py-3">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={() => navigate({ to: "/" })}
               aria-label="العودة"
@@ -89,6 +100,13 @@ function SearchPage() {
                 بحث
               </button>
             </form>
+            <button
+              onClick={toggle}
+              aria-label="تبديل الوضع الليلي"
+              className="rounded-lg p-2 text-muted-foreground transition hover:bg-muted"
+            >
+              {theme === "dark" ? <Sun className="size-5" /> : <Moon className="size-5" />}
+            </button>
           </div>
 
           <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
@@ -122,7 +140,7 @@ function SearchPage() {
               onClick={() => go({ book: undefined })}
               className={`rounded-lg border px-2.5 py-1 text-xs transition ${
                 !book
-                  ? "border-gold bg-gold text-gold-foreground"
+                  ? "border-primary bg-primary text-primary-foreground"
                   : "border-border text-muted-foreground"
               }`}
             >
@@ -134,7 +152,7 @@ function SearchPage() {
                 onClick={() => go({ book: f.value })}
                 className={`rounded-lg border px-2.5 py-1 text-xs transition ${
                   book === f.value
-                    ? "border-gold bg-gold text-gold-foreground"
+                    ? "border-primary bg-primary text-primary-foreground"
                     : "border-border text-muted-foreground"
                 }`}
               >
@@ -144,9 +162,15 @@ function SearchPage() {
           </div>
         )}
 
+        {category.id === "athar" && (
+          <p className="mt-4 rounded-xl border border-border bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
+            الآثار هي أقوال الصحابة والتابعين وأتباعهم ومروياتهم وحِكَمهم، وهي ليست أحاديث نبوية.
+          </p>
+        )}
+
         {isFetching && (
           <div className="mt-10 flex items-center justify-center gap-2 text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" /> جارٍ جلب النتائج…
+            <Loader2 className="size-4 animate-spin" /> جارٍ البحث في المصادر…
           </div>
         )}
 
@@ -160,31 +184,14 @@ function SearchPage() {
 
             <ul className="mt-3 space-y-3">
               {data.results.map((r) => (
-                <li
-                  key={r.url}
-                  className="rounded-2xl border border-border bg-card p-4 shadow-[var(--shadow-soft)] transition hover:border-gold"
-                >
-                  <a href={r.url} target="_blank" rel="noopener noreferrer" className="block">
-                    <div className="flex items-center gap-2 text-xs text-primary">
-                      {r.domain}
-                      <ExternalLink className="size-3" />
-                    </div>
-                    <h2 className="mt-1 font-display text-lg leading-snug text-foreground">
-                      {r.title}
-                    </h2>
-                    {r.snippet && (
-                      <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-                        {r.snippet}
-                      </p>
-                    )}
-                  </a>
-                </li>
+                <ResultCard key={r.id} result={r} query={q} />
               ))}
             </ul>
 
             {data.results.length === 0 && (
               <div className="mt-8 rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
-                لم نعثر على نتائج ضمن المصادر المحددة. جرّب كلمات أخرى أو اختر «كل المصادر».
+                لم نعثر على نتائج. جرّب اسم السورة، أو رقم الآية (مثل «البقرة 255»)، أو كلمة أخرى،
+                أو اختر تصنيف «الكل».
               </div>
             )}
           </>
