@@ -399,7 +399,14 @@ export async function searchAll(query: string): Promise<SearchResult[]> {
     searchHadith(query).catch(() => []),
     searchAthar(query).catch(() => []),
   ]);
-  return [...quran.slice(0, 15), ...hadith.slice(0, 15), ...athar.slice(0, 10)].sort(
-    (a, b) => b.score - a.score,
-  );
+  // an exact ayah reference (e.g. "البقرة 255") should not be drowned by
+  // hadith entries that merely share the same number
+  const exactAyah = quran.some((r) => r.score >= 1000);
+  const demote = (r: SearchResult) =>
+    exactAyah && r.score >= 1000 ? { ...r, score: 250 } : r;
+  return [
+    ...quran.slice(0, 15),
+    ...hadith.slice(0, 15).map(demote),
+    ...athar.slice(0, 10).map(demote),
+  ].sort((a, b) => b.score - a.score);
 }
