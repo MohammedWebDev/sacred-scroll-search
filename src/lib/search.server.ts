@@ -30,7 +30,7 @@ const AR_DIGITS: Record<string, string> = {
 export const normalize = (s: string) =>
   s
     .replace(/[٠-٩]/g, (d) => AR_DIGITS[d] ?? d)
-    .replace(/[\u064B-\u0652\u0670\u0640]/g, "")
+    .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g, "")
     .replace(/[أإآٱ]/g, "ا")
     .replace(/ى/g, "ي")
     .replace(/ة/g, "ه")
