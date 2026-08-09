@@ -1,4 +1,4 @@
-import { BookOpen, ScrollText, Library, Feather } from "lucide-react";
+import { BookOpen, ScrollText, Library, Feather, Sparkles } from "lucide-react";
 
 export type Category = {
   id: string;
@@ -9,31 +9,51 @@ export type Category = {
   suggestions: string[];
 };
 
+const HADITH_FILTERS = [
+  { name: "صحيح البخاري", value: "bukhari" },
+  { name: "صحيح مسلم", value: "muslim" },
+  { name: "سنن أبي داود", value: "abudawud" },
+  { name: "سنن الترمذي", value: "tirmidhi" },
+  { name: "سنن النسائي", value: "nasai" },
+  { name: "سنن ابن ماجه", value: "ibnmajah" },
+  { name: "الأربعون النووية", value: "nawawi" },
+];
+
+const ATHAR_FILTERS = [
+  { name: "موطأ مالك", value: "malik" },
+  { name: "صحيح البخاري", value: "bukhari" },
+  { name: "صحيح مسلم", value: "muslim" },
+  { name: "سنن أبي داود", value: "abudawud" },
+];
+
 export const CATEGORIES: Category[] = [
+  {
+    id: "all",
+    label: "الكل",
+    hint: "ابحث بكلمة، أو اسم سورة، أو رقم آية، أو رقم حديث…",
+    icon: Sparkles,
+    filters: [],
+    suggestions: ["البقرة 255", "سورة الكهف", "إنما الأعمال بالنيات", "الصبر", "بر الوالدين"],
+  },
   {
     id: "ayat",
     label: "الآيات",
-    hint: "ابحث عن كلمة أو جزء من آية",
+    hint: "اسم السورة، رقم الآية (مثل: البقرة 255) أو كلمة من الآية",
     icon: BookOpen,
     filters: [],
-    suggestions: ["آية الكرسي", "آيات الصبر", "الرزق", "بر الوالدين", "التوبة والاستغفار"],
+    suggestions: ["آية الكرسي", "البقرة 255", "الكهف 10", "آيات الصبر", "الرزق"],
   },
   {
     id: "hadith",
     label: "الأحاديث",
-    hint: "ابحث في نصوص كتب السنة مع بيان درجة الحديث",
+    hint: "نص الحديث، أو اسم الكتاب مع رقم الحديث (مثل: البخاري 1)",
     icon: ScrollText,
-    filters: [
-      { name: "صحيح البخاري", value: "bukhari" },
-      { name: "صحيح مسلم", value: "muslim" },
-      { name: "سنن أبي داود", value: "abudawud" },
-      { name: "سنن الترمذي", value: "tirmidhi" },
-    ],
+    filters: HADITH_FILTERS,
     suggestions: [
       "إنما الأعمال بالنيات",
+      "البخاري 1",
       "فضل الصلاة",
       "حسن الخلق",
-      "صيام عاشوراء",
       "الأربعون النووية",
     ],
   },
@@ -43,27 +63,30 @@ export const CATEGORIES: Category[] = [
     hint: "اكتب اسم السورة أو رقمها",
     icon: Library,
     filters: [],
-    suggestions: ["سورة الكهف", "سورة يس", "سورة الملك", "سورة الرحمن", "سورة البقرة"],
+    suggestions: ["سورة الكهف", "سورة يس", "سورة الملك", "سورة الرحمن", "18"],
   },
   {
     id: "athar",
     label: "الآثار",
-    hint: "ابحث في نصوص الآثار والمرويات",
+    hint: "أقوال الصحابة والتابعين وأتباعهم ومروياتهم",
     icon: Feather,
-    filters: [
-      { name: "صحيح البخاري", value: "bukhari" },
-      { name: "صحيح مسلم", value: "muslim" },
-      { name: "سنن أبي داود", value: "abudawud" },
-      { name: "سنن الترمذي", value: "tirmidhi" },
-    ],
+    filters: ATHAR_FILTERS,
     suggestions: [
-      "أثر عن عمر بن الخطاب",
-      "أقوال الحسن البصري",
-      "آثار السلف في الزهد",
-      "قول ابن مسعود",
+      "عمر بن الخطاب",
+      "ابن مسعود",
+      "الحسن البصري",
+      "الزهد",
+      "سعيد بن المسيب",
     ],
   },
 ];
 
 export const getCategory = (id?: string) =>
   CATEGORIES.find((c) => c.id === id) ?? CATEGORIES[0]!;
+
+export const KIND_LABEL: Record<string, string> = {
+  ayah: "آية",
+  surah: "سورة",
+  hadith: "حديث",
+  athar: "أثر",
+};
