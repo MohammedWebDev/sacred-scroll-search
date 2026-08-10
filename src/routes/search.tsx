@@ -47,19 +47,22 @@ function SearchPage() {
 
   const runSearch = useServerFn(webSearch);
 
+  const isWeb = category.id === "web";
+
   const { data, isFetching } = useQuery({
     queryKey: ["search", q, category.id, book ?? "all"],
     queryFn: () =>
       runSearch({
         data: { query: q, category: category.id, ...(book ? { book } : {}) },
       }),
-    enabled: q.trim().length > 0,
+    enabled: !isWeb && q.trim().length > 0,
     staleTime: 5 * 60 * 1000,
   });
 
   useEffect(() => {
     if (data) bumpStats({ searches: 1, results: data.results.length });
   }, [data]);
+
 
   const go = (next: Partial<SearchParams>) =>
     navigate({
