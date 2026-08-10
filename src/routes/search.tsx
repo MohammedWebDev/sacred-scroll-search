@@ -6,6 +6,9 @@ import { Search, ArrowRight, Loader2, Filter, Moon, Sun } from "lucide-react";
 import { CATEGORIES, getCategory } from "@/lib/categories";
 import { webSearch } from "@/lib/search.functions";
 import { ResultCard } from "@/components/ResultCard";
+import { WebResults } from "@/components/WebResults";
+import { SearchSuggestions } from "@/components/SearchSuggestions";
+
 import { useTheme } from "@/lib/theme";
 import { bumpStats } from "@/lib/stats";
 
