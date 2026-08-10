@@ -23,7 +23,7 @@ const ERROR_COPY: Record<string, { title: string; body: string; icon: typeof Wif
   },
   config: {
     title: "محرك البحث غير مهيأ",
-    body: "مفتاح خدمة البحث غير متوفر حاليًا.",
+    body: "يلزم تفعيل خدمة Custom Search JSON API لمفتاح جوجل المستخدم، أو أن المفتاح مقيّد.",
     icon: AlertTriangle,
   },
   upstream: {

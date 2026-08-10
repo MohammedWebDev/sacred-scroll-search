@@ -198,7 +198,10 @@ export async function googleWebSearch(opts: {
   try {
     const res = await fetch(url, { signal: controller.signal });
     if (res.status === 429 || res.status === 403) {
-      return { results: [], total: 0, start, error: "quota" };
+      const body = await res.text().catch(() => "");
+      // 403 also covers "API not enabled" / restricted key — that is config, not quota.
+      const isConfig = /does not have the access|has not been used|disabled|API_KEY/i.test(body);
+      return { results: [], total: 0, start, error: isConfig ? "config" : "quota" };
     }
     if (!res.ok) return { results: [], total: 0, start, error: "upstream" };
 
