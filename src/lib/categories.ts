@@ -1,4 +1,4 @@
-import { BookOpen, ScrollText, Library, Feather, Sparkles } from "lucide-react";
+import { BookOpen, ScrollText, Library, Feather, Sparkles, Globe } from "lucide-react";
 
 export type Category = {
   id: string;
@@ -34,6 +34,20 @@ export const CATEGORIES: Category[] = [
     icon: Sparkles,
     filters: [],
     suggestions: ["البقرة 255", "سورة الكهف", "إنما الأعمال بالنيات", "الصبر", "بر الوالدين"],
+  },
+  {
+    id: "web",
+    label: "الويب",
+    hint: "بحث في المواقع الإسلامية الموثوقة عبر محرك بحث جوجل",
+    icon: Globe,
+    filters: [
+      { name: "quran.com", value: "quran.com" },
+      { name: "sunnah.com", value: "sunnah.com" },
+      { name: "dorar.net", value: "dorar.net" },
+      { name: "islamweb.net", value: "islamweb.net" },
+      { name: "islamqa.info", value: "islamqa.info" },
+    ],
+    suggestions: ["تفسير آية الكرسي", "شرح حديث النية", "فضل سورة الكهف", "أقوال الصحابة في الزهد"],
   },
   {
     id: "ayat",
@@ -89,4 +103,5 @@ export const KIND_LABEL: Record<string, string> = {
   surah: "سورة",
   hadith: "حديث",
   athar: "أثر",
+  web: "ويب",
 };

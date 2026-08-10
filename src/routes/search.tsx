@@ -6,6 +6,9 @@ import { Search, ArrowRight, Loader2, Filter, Moon, Sun } from "lucide-react";
 import { CATEGORIES, getCategory } from "@/lib/categories";
 import { webSearch } from "@/lib/search.functions";
 import { ResultCard } from "@/components/ResultCard";
+import { WebResults } from "@/components/WebResults";
+import { SearchSuggestions } from "@/components/SearchSuggestions";
+
 import { useTheme } from "@/lib/theme";
 import { bumpStats } from "@/lib/stats";
 
@@ -41,11 +44,15 @@ function SearchPage() {
   const navigate = useNavigate();
   const category = getCategory(cat);
   const [term, setTerm] = useState(q);
+  const [focused, setFocused] = useState(false);
+
   const { theme, toggle } = useTheme();
 
   useEffect(() => setTerm(q), [q]);
 
   const runSearch = useServerFn(webSearch);
+
+  const isWeb = category.id === "web";
 
   const { data, isFetching } = useQuery({
     queryKey: ["search", q, category.id, book ?? "all"],
@@ -53,13 +60,14 @@ function SearchPage() {
       runSearch({
         data: { query: q, category: category.id, ...(book ? { book } : {}) },
       }),
-    enabled: q.trim().length > 0,
+    enabled: !isWeb && q.trim().length > 0,
     staleTime: 5 * 60 * 1000,
   });
 
   useEffect(() => {
     if (data) bumpStats({ searches: 1, results: data.results.length });
   }, [data]);
+
 
   const go = (next: Partial<SearchParams>) =>
     navigate({
@@ -82,15 +90,19 @@ function SearchPage() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
+                setFocused(false);
                 if (term.trim()) go({ q: term.trim() });
               }}
-              className="flex flex-1 items-center gap-2 rounded-xl border border-border bg-background px-3"
+              className="relative flex flex-1 items-center gap-2 rounded-xl border border-border bg-background px-3"
             >
               <Search className="size-4 shrink-0 text-muted-foreground" />
               <input
                 value={term}
                 onChange={(e) => setTerm(e.target.value)}
+                onFocus={() => setFocused(true)}
+                onBlur={() => setTimeout(() => setFocused(false), 120)}
                 aria-label="حقل البحث"
+                autoComplete="off"
                 className="min-w-0 flex-1 bg-transparent py-2.5 text-sm outline-none"
               />
               <button
@@ -99,7 +111,18 @@ function SearchPage() {
               >
                 بحث
               </button>
+              {focused && term.trim().length >= 2 && (
+                <SearchSuggestions
+                  term={term}
+                  onPick={(value) => {
+                    setTerm(value);
+                    setFocused(false);
+                    go({ q: value });
+                  }}
+                />
+              )}
             </form>
+
             <button
               onClick={toggle}
               aria-label="تبديل الوضع الليلي"
@@ -168,34 +191,47 @@ function SearchPage() {
           </p>
         )}
 
-        {isFetching && (
-          <div className="mt-10 flex items-center justify-center gap-2 text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" /> جارٍ البحث في المصادر…
-          </div>
-        )}
-
-        {!isFetching && data && (
+        {isWeb ? (
+          q.trim() ? (
+            <WebResults query={q} site={book} />
+          ) : (
+            <div className="mt-8 rounded-2xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+              اكتب كلمة للبحث في الويب.
+            </div>
+          )
+        ) : (
           <>
-            <p className="mt-6 text-xs text-muted-foreground">
-              {data.results.length > 0
-                ? `${data.results.length} نتيجة عن «${q}» ضمن ${category.label}`
-                : "لا توجد نتائج"}
-            </p>
-
-            <ul className="mt-3 space-y-3">
-              {data.results.map((r) => (
-                <ResultCard key={r.id} result={r} query={q} />
-              ))}
-            </ul>
-
-            {data.results.length === 0 && (
-              <div className="mt-8 rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
-                لم نعثر على نتائج. جرّب اسم السورة، أو رقم الآية (مثل «البقرة 255»)، أو كلمة أخرى،
-                أو اختر تصنيف «الكل».
+            {isFetching && (
+              <div className="mt-10 flex items-center justify-center gap-2 text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" /> جارٍ البحث في المصادر…
               </div>
+            )}
+
+            {!isFetching && data && (
+              <>
+                <p className="mt-6 text-xs text-muted-foreground">
+                  {data.results.length > 0
+                    ? `${data.results.length} نتيجة عن «${q}» ضمن ${category.label}`
+                    : "لا توجد نتائج"}
+                </p>
+
+                <ul className="mt-3 space-y-3">
+                  {data.results.map((r) => (
+                    <ResultCard key={r.id} result={r} query={q} />
+                  ))}
+                </ul>
+
+                {data.results.length === 0 && (
+                  <div className="mt-8 rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
+                    لم نعثر على نتائج. جرّب اسم السورة، أو رقم الآية (مثل «البقرة 255»)، أو كلمة
+                    أخرى، أو اختر تصنيف «الكل».
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
+
       </main>
     </div>
   );
