@@ -171,34 +171,47 @@ function SearchPage() {
           </p>
         )}
 
-        {isFetching && (
-          <div className="mt-10 flex items-center justify-center gap-2 text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" /> جارٍ البحث في المصادر…
-          </div>
-        )}
-
-        {!isFetching && data && (
+        {isWeb ? (
+          q.trim() ? (
+            <WebResults query={q} site={book} />
+          ) : (
+            <div className="mt-8 rounded-2xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+              اكتب كلمة للبحث في الويب.
+            </div>
+          )
+        ) : (
           <>
-            <p className="mt-6 text-xs text-muted-foreground">
-              {data.results.length > 0
-                ? `${data.results.length} نتيجة عن «${q}» ضمن ${category.label}`
-                : "لا توجد نتائج"}
-            </p>
-
-            <ul className="mt-3 space-y-3">
-              {data.results.map((r) => (
-                <ResultCard key={r.id} result={r} query={q} />
-              ))}
-            </ul>
-
-            {data.results.length === 0 && (
-              <div className="mt-8 rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
-                لم نعثر على نتائج. جرّب اسم السورة، أو رقم الآية (مثل «البقرة 255»)، أو كلمة أخرى،
-                أو اختر تصنيف «الكل».
+            {isFetching && (
+              <div className="mt-10 flex items-center justify-center gap-2 text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" /> جارٍ البحث في المصادر…
               </div>
+            )}
+
+            {!isFetching && data && (
+              <>
+                <p className="mt-6 text-xs text-muted-foreground">
+                  {data.results.length > 0
+                    ? `${data.results.length} نتيجة عن «${q}» ضمن ${category.label}`
+                    : "لا توجد نتائج"}
+                </p>
+
+                <ul className="mt-3 space-y-3">
+                  {data.results.map((r) => (
+                    <ResultCard key={r.id} result={r} query={q} />
+                  ))}
+                </ul>
+
+                {data.results.length === 0 && (
+                  <div className="mt-8 rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
+                    لم نعثر على نتائج. جرّب اسم السورة، أو رقم الآية (مثل «البقرة 255»)، أو كلمة
+                    أخرى، أو اختر تصنيف «الكل».
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
+
       </main>
     </div>
   );
