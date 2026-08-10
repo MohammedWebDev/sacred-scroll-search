@@ -44,6 +44,8 @@ function SearchPage() {
   const navigate = useNavigate();
   const category = getCategory(cat);
   const [term, setTerm] = useState(q);
+  const [focused, setFocused] = useState(false);
+
   const { theme, toggle } = useTheme();
 
   useEffect(() => setTerm(q), [q]);
@@ -88,15 +90,19 @@ function SearchPage() {
             <form
               onSubmit={(e) => {
                 e.preventDefault();
+                setFocused(false);
                 if (term.trim()) go({ q: term.trim() });
               }}
-              className="flex flex-1 items-center gap-2 rounded-xl border border-border bg-background px-3"
+              className="relative flex flex-1 items-center gap-2 rounded-xl border border-border bg-background px-3"
             >
               <Search className="size-4 shrink-0 text-muted-foreground" />
               <input
                 value={term}
                 onChange={(e) => setTerm(e.target.value)}
+                onFocus={() => setFocused(true)}
+                onBlur={() => setTimeout(() => setFocused(false), 120)}
                 aria-label="حقل البحث"
+                autoComplete="off"
                 className="min-w-0 flex-1 bg-transparent py-2.5 text-sm outline-none"
               />
               <button
@@ -105,7 +111,18 @@ function SearchPage() {
               >
                 بحث
               </button>
+              {focused && term.trim().length >= 2 && (
+                <SearchSuggestions
+                  term={term}
+                  onPick={(value) => {
+                    setTerm(value);
+                    setFocused(false);
+                    go({ q: value });
+                  }}
+                />
+              )}
             </form>
+
             <button
               onClick={toggle}
               aria-label="تبديل الوضع الليلي"
