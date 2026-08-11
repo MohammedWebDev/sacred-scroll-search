@@ -20,6 +20,8 @@ export type WebSearchPayload = {
   start: number;
   nextStart?: number;
   spelling?: string;
+  /** True when results come from the internal Islamic sources instead of Google. */
+  fallback?: boolean;
   error?: "empty" | "quota" | "timeout" | "network" | "config" | "upstream";
 };
 
