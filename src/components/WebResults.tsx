@@ -110,12 +110,21 @@ export function WebResults({ query, site }: { query: string; site?: string | und
   }
 
   const total = pages[0]?.total ?? results.length;
+  const isFallback = Boolean(pages[0]?.fallback);
 
   return (
     <>
+      {isFallback && (
+        <p className="mt-6 rounded-xl border border-border bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
+          تعذّر الوصول إلى محرك جوجل حاليًا، لذا نعرض نتائج من المصادر الإسلامية الداخلية.
+        </p>
+      )}
       <p className="mt-6 text-xs text-muted-foreground">
-        نحو {total.toLocaleString("ar-EG")} نتيجة على الويب عن «{query}»
+        {isFallback
+          ? `${results.length} نتيجة من المصادر الداخلية عن «${query}»`
+          : `نحو ${total.toLocaleString("ar-EG")} نتيجة على الويب عن «${query}»`}
       </p>
+
       <ul className="mt-3 space-y-3">
         {results.map((r) => (
           <WebResultCard key={r.id} result={r} query={query} />

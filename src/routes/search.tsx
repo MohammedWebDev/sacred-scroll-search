@@ -2,12 +2,12 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Search, ArrowRight, Loader2, Filter, Moon, Sun } from "lucide-react";
+import { ArrowRight, Loader2, Filter, Moon, Sun } from "lucide-react";
 import { CATEGORIES, getCategory } from "@/lib/categories";
 import { webSearch } from "@/lib/search.functions";
 import { ResultCard } from "@/components/ResultCard";
 import { WebResults } from "@/components/WebResults";
-import { SearchSuggestions } from "@/components/SearchSuggestions";
+import { Omnibox } from "@/components/Omnibox";
 
 import { useTheme } from "@/lib/theme";
 import { bumpStats } from "@/lib/stats";
@@ -44,7 +44,6 @@ function SearchPage() {
   const navigate = useNavigate();
   const category = getCategory(cat);
   const [term, setTerm] = useState(q);
-  const [focused, setFocused] = useState(false);
 
   const { theme, toggle } = useTheme();
 
@@ -87,41 +86,15 @@ function SearchPage() {
             >
               <ArrowRight className="size-5" />
             </button>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                setFocused(false);
-                if (term.trim()) go({ q: term.trim() });
+            <Omnibox
+              value={term}
+              onChange={setTerm}
+              onSearch={(value) => {
+                setTerm(value);
+                go({ q: value });
               }}
-              className="relative flex flex-1 items-center gap-2 rounded-xl border border-border bg-background px-3"
-            >
-              <Search className="size-4 shrink-0 text-muted-foreground" />
-              <input
-                value={term}
-                onChange={(e) => setTerm(e.target.value)}
-                onFocus={() => setFocused(true)}
-                onBlur={() => setTimeout(() => setFocused(false), 120)}
-                aria-label="حقل البحث"
-                autoComplete="off"
-                className="min-w-0 flex-1 bg-transparent py-2.5 text-sm outline-none"
-              />
-              <button
-                type="submit"
-                className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"
-              >
-                بحث
-              </button>
-              {focused && term.trim().length >= 2 && (
-                <SearchSuggestions
-                  term={term}
-                  onPick={(value) => {
-                    setTerm(value);
-                    setFocused(false);
-                    go({ q: value });
-                  }}
-                />
-              )}
-            </form>
+            />
+
 
             <button
               onClick={toggle}

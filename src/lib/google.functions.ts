@@ -10,13 +10,31 @@ export const googleSearch = createServerFn({ method: "POST" })
     site: input.site ? String(input.site).slice(0, 80) : undefined,
   }))
   .handler(async ({ data }): Promise<WebSearchPayload> => {
-    const { googleWebSearch } = await import("@/lib/google.server");
-    return googleWebSearch({
-      apiKey: process.env["GOOGLE_API_KEY"] ?? process.env["VITE_GOOGLE_SEARCH_API_KEY"],
+    const [{ googleWebSearch }, { getSearchConfig }] = await Promise.all([
+      import("@/lib/google.server"),
+      import("@/lib/searchConfig"),
+    ]);
+    const { apiKey, cx } = getSearchConfig();
+
+    const payload = await googleWebSearch({
+      apiKey,
+      cx,
       query: data.query,
       start: data.start,
       site: data.site,
     });
+
+    // Resilience: if Google is unavailable (bad key, quota, network), serve the
+    // internal Islamic sources so the browser never dead-ends on the user.
+    if (payload.error && payload.error !== "empty" && (data.start ?? 1) <= 1) {
+      const { toWebFallback } = await import("@/lib/google.fallback.server");
+      const fallback = await toWebFallback(data.query);
+      if (fallback.length) {
+        return { results: fallback, total: fallback.length, start: 1, fallback: true };
+      }
+    }
+
+    return payload;
   });
 
 export const querySuggestions = createServerFn({ method: "POST" })

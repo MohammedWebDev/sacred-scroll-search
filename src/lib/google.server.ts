@@ -20,6 +20,8 @@ export type WebSearchPayload = {
   start: number;
   nextStart?: number;
   spelling?: string;
+  /** True when results come from the internal Islamic sources instead of Google. */
+  fallback?: boolean;
   error?: "empty" | "quota" | "timeout" | "network" | "config" | "upstream";
 };
 
@@ -169,6 +171,7 @@ function cacheSet(key: string, payload: WebSearchPayload) {
 
 export async function googleWebSearch(opts: {
   apiKey: string | undefined;
+  cx?: string | undefined;
   query: string;
   start?: number;
   site?: string | undefined;
@@ -178,14 +181,15 @@ export async function googleWebSearch(opts: {
   if (!query) return { results: [], total: 0, start, error: "empty" };
   if (!opts.apiKey) return { results: [], total: 0, start, error: "config" };
 
+  const cx = opts.cx || GOOGLE_CX;
   const q = opts.site ? `${query} site:${opts.site}` : query;
-  const key = `${q}|${start}`;
+  const key = `${q}|${start}|${cx}`;
   const cached = cacheGet(key);
   if (cached) return cached;
 
   const url = new URL(ENDPOINT);
   url.searchParams.set("key", opts.apiKey);
-  url.searchParams.set("cx", GOOGLE_CX);
+  url.searchParams.set("cx", cx);
   url.searchParams.set("q", q);
   url.searchParams.set("num", String(PAGE_SIZE));
   url.searchParams.set("start", String(start));
@@ -197,10 +201,12 @@ export async function googleWebSearch(opts: {
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const res = await fetch(url, { signal: controller.signal });
-    if (res.status === 429 || res.status === 403) {
+    if (res.status === 429 || res.status === 403 || res.status === 400) {
       const body = await res.text().catch(() => "");
-      // 403 also covers "API not enabled" / restricted key — that is config, not quota.
-      const isConfig = /does not have the access|has not been used|disabled|API_KEY/i.test(body);
+      // 400/403 also cover invalid, restricted, or not-enabled keys — config, not quota.
+      const isConfig =
+        res.status === 400 ||
+        /does not have the access|has not been used|disabled|API_KEY|invalid/i.test(body);
       return { results: [], total: 0, start, error: isConfig ? "config" : "quota" };
     }
     if (!res.ok) return { results: [], total: 0, start, error: "upstream" };
