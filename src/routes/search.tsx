@@ -2,12 +2,12 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Search, ArrowRight, Loader2, Filter, Moon, Sun } from "lucide-react";
+import { ArrowRight, Loader2, Filter, Moon, Sun } from "lucide-react";
 import { CATEGORIES, getCategory } from "@/lib/categories";
 import { webSearch } from "@/lib/search.functions";
 import { ResultCard } from "@/components/ResultCard";
 import { WebResults } from "@/components/WebResults";
-import { SearchSuggestions } from "@/components/SearchSuggestions";
+import { Omnibox } from "@/components/Omnibox";
 
 import { useTheme } from "@/lib/theme";
 import { bumpStats } from "@/lib/stats";
@@ -44,7 +44,6 @@ function SearchPage() {
   const navigate = useNavigate();
   const category = getCategory(cat);
   const [term, setTerm] = useState(q);
-  const [focused, setFocused] = useState(false);
 
   const { theme, toggle } = useTheme();
 
