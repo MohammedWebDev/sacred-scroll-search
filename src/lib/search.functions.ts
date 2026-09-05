@@ -14,33 +14,64 @@ export type SearchResult = {
   score: number;
 };
 
+export type SearchPayload = {
+  results: SearchResult[];
+  total: number;
+  counts: Record<string, number>;
+  hasMore: boolean;
+  suggestion?: string;
+  error?: string;
+};
+
+const PAGE_SIZE = 12;
+
 export const webSearch = createServerFn({ method: "POST" })
-  .inputValidator((input: { query: string; category: string; book?: string }) => ({
+  .inputValidator((input: { query: string; category: string; book?: string; limit?: number }) => ({
     query: String(input.query ?? "").slice(0, 200),
     category: String(input.category ?? "all"),
     book: input.book ? String(input.book) : undefined,
+    limit: Math.min(120, Math.max(PAGE_SIZE, Number(input.limit ?? PAGE_SIZE))),
   }))
-  .handler(async ({ data }): Promise<{ results: SearchResult[]; error?: string }> => {
+  .handler(async ({ data }): Promise<SearchPayload> => {
     const q = data.query.trim();
-    if (!q) return { results: [] };
+    const empty: SearchPayload = { results: [], total: 0, counts: {}, hasMore: false };
+    if (!q) return empty;
+
     const { searchQuran, searchSurahs, searchHadith, searchAthar, searchAll } = await import(
       "@/lib/search.server"
     );
     const books = data.book ? [data.book] : undefined;
+
     try {
+      let all: SearchResult[];
       switch (data.category) {
         case "surah":
-          return { results: await searchSurahs(q) };
+          all = await searchSurahs(q);
+          break;
         case "hadith":
-          return { results: await searchHadith(q, books) };
+          all = await searchHadith(q, books);
+          break;
         case "athar":
-          return { results: await searchAthar(q, books) };
+          all = await searchAthar(q, books);
+          break;
         case "ayat":
-          return { results: await searchQuran(q) };
+          all = await searchQuran(q);
+          break;
         default:
-          return { results: await searchAll(q) };
+          all = await searchAll(q);
       }
+
+      const counts: Record<string, number> = {};
+      for (const r of all) counts[r.kind] = (counts[r.kind] ?? 0) + 1;
+
+      const results = all.slice(0, data.limit);
+      return {
+        results,
+        total: all.length,
+        counts,
+        hasMore: all.length > results.length,
+      };
     } catch {
-      return { results: [], error: "upstream" };
+      return { ...empty, error: "upstream" };
     }
   });

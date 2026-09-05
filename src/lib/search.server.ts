@@ -1,3 +1,6 @@
+import { prepareQuery, normalize, scoreText, TopK, type PreparedQuery } from "@/lib/relevance";
+import { parseIntent, detectBook } from "@/lib/query-intent";
+
 export type ResultKind = "ayah" | "surah" | "hadith" | "athar";
 
 export type SearchResult = {
@@ -11,57 +14,6 @@ export type SearchResult = {
   grade?: string;
   score: number;
 };
-
-/* ---------------- helpers ---------------- */
-
-const AR_DIGITS: Record<string, string> = {
-  "٠": "0",
-  "١": "1",
-  "٢": "2",
-  "٣": "3",
-  "٤": "4",
-  "٥": "5",
-  "٦": "6",
-  "٧": "7",
-  "٨": "8",
-  "٩": "9",
-};
-
-export const normalize = (s: string) =>
-  s
-    .replace(/[٠-٩]/g, (d) => AR_DIGITS[d] ?? d)
-    .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g, "")
-    .replace(/[أإآٱ]/g, "ا")
-    .replace(/ى/g, "ي")
-    .replace(/ة/g, "ه")
-    .replace(/ؤ/g, "و")
-    .replace(/ئ/g, "ي")
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const STOP = new Set(["سوره", "سورة", "ايه", "اية", "الايه", "حديث", "الحديث", "في", "من", "عن", "باب", "رقم", "قال"]);
-
-const tokens = (s: string) => normalize(s).split(" ").filter((w) => w.length > 1 && !STOP.has(w));
-
-/** relevance score of a text against query tokens (0 = no match) */
-function scoreText(text: string, q: string, qTokens: string[]) {
-  const n = normalize(text);
-  if (!qTokens.length) return 0;
-  let score = 0;
-  if (q && n.includes(q)) score += 100 + Math.min(40, (q.length / Math.max(n.length, 1)) * 400);
-  let hits = 0;
-  for (const t of qTokens) {
-    if (n.includes(t)) {
-      hits++;
-      score += 12;
-    }
-  }
-  if (hits === 0) return 0;
-  if (hits === qTokens.length) score += 30;
-  score += Math.max(0, 10 - n.length / 200);
-  return score;
-}
 
 /* ---------------- Quran metadata ---------------- */
 
@@ -87,7 +39,6 @@ export async function getSurahs(): Promise<SurahMeta[]> {
 
 const surahClean = (name: string) => normalize(name).replace(/^سوره\s*/, "");
 
-/** find surahs matching a (partial) name, number or english name */
 async function matchSurahs(query: string) {
   const list = await getSurahs();
   const q = normalize(query).replace(/^سوره\s*/, "").trim();
@@ -95,30 +46,20 @@ async function matchSurahs(query: string) {
   const out: { s: SurahMeta; score: number }[] = [];
   for (const s of list) {
     const name = surahClean(s.name);
-    const en = s.englishName.toLowerCase();
+    const bare = name.replace(/^ال/, "");
+    const en = s.englishName.toLowerCase().replace(/[^a-z]/g, "");
+    const qBare = q.replace(/^ال/, "");
+    const qEn = q.replace(/[^a-z]/g, "");
     let score = 0;
-    if (String(s.number) === q) score = 200;
-    else if (name === q) score = 190;
-    else if (name.startsWith(q) || q.startsWith(name)) score = 160;
-    else if (name.includes(q) || q.includes(name)) score = 120;
-    else if (en === q.toLowerCase() || en.includes(q.toLowerCase())) score = 110;
+    if (String(s.number) === q) score = 100;
+    else if (name === q || bare === qBare) score = 98;
+    else if (name.startsWith(q) || bare.startsWith(qBare)) score = 88;
+    else if (q.includes(name) || q.includes(bare)) score = 80;
+    else if (name.includes(q) && q.length > 2) score = 70;
+    else if (qEn.length > 2 && (en === qEn || en.startsWith(qEn))) score = 75;
     if (score) out.push({ s, score });
   }
   return out.sort((a, b) => b.score - a.score);
-}
-
-/** parse things like "2:255", "البقرة 255", "سورة الكهف الآية 10" */
-async function parseAyahRef(query: string) {
-  const n = normalize(query);
-  const colon = n.match(/(\d+)\s*[:\/]\s*(\d+)/);
-  if (colon) return { surahQuery: colon[1]!, ayah: Number(colon[2]) };
-  const num = n.match(/(\d+)/);
-  const withoutNum = n.replace(/\d+/g, " ").replace(/\s+/g, " ").trim();
-  if (num && withoutNum) {
-    const m = await matchSurahs(withoutNum);
-    if (m.length) return { surahQuery: withoutNum, ayah: Number(num[1]) };
-  }
-  return null;
 }
 
 type Ayah = { number: number; text: string; numberInSurah: number };
@@ -137,14 +78,15 @@ async function getSurahAyahs(num: number): Promise<Ayah[]> {
 }
 
 function ayahResult(s: SurahMeta, a: Ayah, score: number): SearchResult {
+  const clean = s.name.replace(/^سُورَةُ\s*/, "");
   return {
     id: `ayah-${s.number}-${a.numberInSurah}`,
     kind: "ayah",
-    title: `${s.name} — الآية ${a.numberInSurah}`,
+    title: `${clean} — الآية ${a.numberInSurah}`,
     url: `https://quran.com/${s.number}/${a.numberInSurah}`,
     snippet: a.text,
     domain: "القرآن الكريم",
-    reference: `[${s.name.replace(/^سُورَةُ\s*/, "")}: ${a.numberInSurah}]`,
+    reference: `[${clean}: ${a.numberInSurah}]`,
     score,
   };
 }
@@ -166,7 +108,7 @@ function surahResult(s: SurahMeta, score: number): SearchResult {
 
 /* ---------------- Quran search ---------------- */
 
-async function searchQuranText(query: string): Promise<SearchResult[]> {
+async function searchQuranRemote(query: string, q: PreparedQuery): Promise<SearchResult[]> {
   const list = await getSurahs();
   const byNumber = new Map(list.map((s) => [s.number, s]));
   const res = await fetch(
@@ -176,74 +118,105 @@ async function searchQuranText(query: string): Promise<SearchResult[]> {
   const json = (await res.json()) as {
     data?: { matches?: { text: string; numberInSurah: number; surah: { number: number } }[] };
   };
-  const q = normalize(query);
-  const qT = tokens(query);
   const out: SearchResult[] = [];
   for (const m of json.data?.matches ?? []) {
     const s = byNumber.get(m.surah.number);
     if (!s) continue;
+    const rel = scoreText(m.text, q);
     out.push(
-      ayahResult(s, { number: 0, text: m.text, numberInSurah: m.numberInSurah }, 60 + scoreText(m.text, q, qT)),
+      ayahResult(s, { number: 0, text: m.text, numberInSurah: m.numberInSurah }, Math.max(45, rel)),
     );
   }
   return out;
 }
 
+/** local scan over already-cached surahs — used when the remote search is weak */
+function searchQuranLocal(q: PreparedQuery, list: SurahMeta[]): SearchResult[] {
+  const top = new TopK<SearchResult>(30);
+  const byNumber = new Map(list.map((s) => [s.number, s]));
+  for (const [num, ayahs] of ayahCache) {
+    const s = byNumber.get(num);
+    if (!s) continue;
+    for (const a of ayahs) {
+      const sc = scoreText(a.text, q);
+      if (sc > 20) top.push(ayahResult(s, a, sc), sc);
+    }
+  }
+  return top.values();
+}
+
 export async function searchQuran(query: string): Promise<SearchResult[]> {
+  const q = prepareQuery(query);
+  const intent = parseIntent(query);
   const out = new Map<string, SearchResult>();
   const add = (r: SearchResult) => {
     const prev = out.get(r.id);
     if (!prev || prev.score < r.score) out.set(r.id, r);
   };
 
-  const ref = await parseAyahRef(query);
-  if (ref) {
-    const m = /^\d+$/.test(ref.surahQuery)
-      ? (await getSurahs()).filter((s) => s.number === Number(ref.surahQuery)).map((s) => ({ s, score: 200 }))
-      : await matchSurahs(ref.surahQuery);
-    const target = m[0]?.s;
-    if (target) {
-      const ayahs = await getSurahAyahs(target.number);
-      const exact = ayahs.find((a) => a.numberInSurah === ref.ayah);
-      if (exact) add(ayahResult(target, exact, 1000));
-      for (const a of ayahs.filter((a) => Math.abs(a.numberInSurah - ref.ayah) <= 2 && a.numberInSurah !== ref.ayah)) {
-        add(ayahResult(target, a, 400 - Math.abs(a.numberInSurah - ref.ayah)));
-      }
+  const list = await getSurahs();
+
+  // 1) explicit ayah reference: "2:255" or "البقرة 255"
+  let refSurah: SurahMeta | undefined;
+  let refAyah: number | undefined;
+  if (intent.pair) {
+    refSurah = list.find((s) => s.number === intent.pair!.first);
+    refAyah = intent.pair.second;
+  } else if (intent.number && intent.text) {
+    const m = await matchSurahs(intent.text);
+    if (m[0]) {
+      refSurah = m[0].s;
+      refAyah = intent.number;
+    }
+  }
+  if (refSurah && refAyah) {
+    const ayahs = await getSurahAyahs(refSurah.number);
+    const exact = ayahs.find((a) => a.numberInSurah === refAyah);
+    if (exact) add(ayahResult(refSurah, exact, 100));
+    for (const a of ayahs) {
+      const d = Math.abs(a.numberInSurah - refAyah);
+      if (d > 0 && d <= 2) add(ayahResult(refSurah, a, 92 - d));
     }
   }
 
-  const nameMatches = await matchSurahs(query);
+  // 2) surah name / number
+  const nameMatches = await matchSurahs(intent.text || query);
   for (const { s, score } of nameMatches.slice(0, 2)) {
-    add(surahResult(s, 500 + score));
-    const ayahs = await getSurahAyahs(s.number);
-    ayahs.slice(0, 10).forEach((a, i) => add(ayahResult(s, a, 300 + score - i)));
+    if (!refAyah) {
+      add(surahResult(s, Math.min(97, score)));
+      const ayahs = await getSurahAyahs(s.number);
+      ayahs.slice(0, 10).forEach((a, i) => add(ayahResult(s, a, Math.max(50, score - 10 - i))));
+    }
   }
 
-  if (tokens(query).length) {
-    for (const r of await searchQuranText(query)) add(r);
+  // 3) content search
+  if (q.tokens.length) {
+    const remote = await searchQuranRemote(query, q).catch(() => []);
+    for (const r of remote) add(r);
+    if (remote.length < 3) for (const r of searchQuranLocal(q, list)) add(r);
   }
 
-  return [...out.values()].sort((a, b) => b.score - a.score).slice(0, 40);
+  return [...out.values()].sort((a, b) => b.score - a.score).slice(0, 60);
 }
 
 export async function searchSurahs(query: string): Promise<SearchResult[]> {
   const list = await getSurahs();
+  if (!normalize(query)) return list.map((s) => surahResult(s, 60));
+  const q = prepareQuery(query);
   const matches = await matchSurahs(query);
-  if (!normalize(query)) return list.slice(0, 30).map((s) => surahResult(s, 100 - s.number));
   const results = matches.map(({ s, score }) => surahResult(s, score));
-  // also surface surahs whose ayahs contain the phrase
-  if (results.length < 5) {
-    const seen = new Set(results.map((r) => r.id));
-    for (const r of await searchQuranText(query)) {
+  const seen = new Set(results.map((r) => r.id));
+  if (results.length < 8 && q.tokens.length) {
+    for (const r of await searchQuranRemote(query, q).catch(() => [])) {
       const num = Number(r.id.split("-")[1]);
       const s = list.find((x) => x.number === num);
       if (s && !seen.has(`surah-${num}`)) {
         seen.add(`surah-${num}`);
-        results.push(surahResult(s, 80));
+        results.push(surahResult(s, Math.min(65, r.score)));
       }
     }
   }
-  return results.slice(0, 30);
+  return results.sort((a, b) => b.score - a.score).slice(0, 40);
 }
 
 /* ---------------- Hadith / Athar ---------------- */
@@ -275,27 +248,31 @@ export const ATHAR_BOOKS = [
   { id: "abudawud", name: "سنن أبي داود", aliases: ["ابو داود"] },
 ];
 
-const NAME_BY_ID = new Map(
-  [...HADITH_BOOKS, ...ATHAR_BOOKS].map((b) => [b.id, b.name] as const),
-);
+const NAME_BY_ID = new Map([...HADITH_BOOKS, ...ATHAR_BOOKS].map((b) => [b.id, b.name] as const));
 
 const bookCache = new Map<string, HadithEdition | null>();
 
 async function getBook(id: string) {
   if (bookCache.has(id)) return bookCache.get(id) ?? null;
-  const res = await fetch(
-    `https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/ara-${id}.min.json`,
-  );
-  if (!res.ok) {
-    bookCache.set(id, null);
-    return null;
+  let data: HadithEdition | null = null;
+  try {
+    const res = await fetch(
+      `https://cdn.jsdelivr.net/gh/fawazahmed0/hadith-api@1/editions/ara-${id}.min.json`,
+    );
+    if (res.ok) data = (await res.json()) as HadithEdition;
+  } catch {
+    data = null;
   }
-  const json = (await res.json()) as HadithEdition;
-  bookCache.set(id, json);
-  return json;
+  bookCache.set(id, data);
+  return data;
 }
 
-function hadithResult(bookId: string, h: HadithEntry, kind: ResultKind, score: number): SearchResult {
+function hadithResult(
+  bookId: string,
+  h: HadithEntry,
+  kind: ResultKind,
+  score: number,
+): SearchResult {
   const name = NAME_BY_ID.get(bookId) ?? bookId;
   const grade = h.grades?.find((g) => g.grade)?.grade;
   const text = h.text.replace(/\s+/g, " ").trim();
@@ -312,34 +289,30 @@ function hadithResult(bookId: string, h: HadithEntry, kind: ResultKind, score: n
   };
 }
 
-/** narrators whose sayings count as آثار (companions / tabi'in / their followers) */
-const ATHAR_NARRATORS = [
-  "عمر بن الخطاب","ابي بكر","ابو بكر","عثمان بن عفان","علي بن ابي طالب","ابن عباس","ابن عمر",
-  "ابن مسعود","عايشه","ابي هريره","انس بن مالك","زيد بن ثابت","معاذ بن جبل","سلمان",
-  "الحسن البصري","سعيد بن المسيب","مجاهد","عطاء","الزهري","ابراهيم النخعي","قتاده","الشعبي",
-  "طاوس","عمر بن عبد العزيز","نافع","سفيان الثوري","الاوزاعي","مالك","ابن سيرين","الحسن",
-  "عكرمه","عروه","القاسم بن محمد","سالم بن عبد الله",
+const PROPHET_MARKERS = [
+  "قال رسول الله",
+  "قال النبي",
+  "سمعت رسول الله",
+  "سمعت النبي",
+  "ان رسول الله",
+  "ان النبي",
+  "يقول رسول الله",
 ];
 
-const PROPHET_MARKERS = ["قال رسول الله", "قال النبي", "عن النبي صلي الله عليه وسلم قال", "سمعت رسول الله"];
+const SAID_BY = /(?:قال|كان|سيل|سئل|عن)\s+([\u0600-\u06FF\s]{3,40}?)\s*(?:رضي الله عنه|رحمه الله)?\s*[:،]?/;
 
-function isAthar(text: string) {
-  const n = normalize(text);
-  const hasNarrator = ATHAR_NARRATORS.some((x) => n.includes(x));
-  if (!hasNarrator) return false;
-  const marker = PROPHET_MARKERS.some((m) => n.includes(m));
-  if (!marker) return true;
-  // marfu' text: only treat as athar when the narrator's own words are quoted afterwards
-  return /(?:قال|كان)\s+(?:عمر|علي|ابن عباس|ابن عمر|ابن مسعود|الحسن|مجاهد|عطاء|قتاده|الزهري|مالك)/.test(n);
-}
+import { ATHAR_NARRATORS } from "@/lib/query-intent";
 
-function parseHadithNumber(query: string, books: { id: string; aliases: string[] }[]) {
-  const n = normalize(query);
-  const num = n.match(/(\d+)/);
-  if (!num) return null;
-  const number = Number(num[1]);
-  const book = books.find((b) => b.aliases.some((a) => n.includes(normalize(a))));
-  return { number, bookId: book?.id };
+/** true when the text is a saying of a companion / successor, not a prophetic hadith */
+function isAthar(normText: string) {
+  const narrator = ATHAR_NARRATORS.find((x) => normText.includes(x));
+  if (!narrator) return false;
+  const marfu = PROPHET_MARKERS.some((m) => normText.includes(normalize(m)));
+  if (!marfu) return true;
+  // marfu' chain: only an athar when the narrator's own words are quoted too
+  const idx = normText.indexOf(narrator);
+  const after = normText.slice(idx);
+  return /(?:قال|كان)\s/.test(after) && !PROPHET_MARKERS.some((m) => after.startsWith(normalize(m)));
 }
 
 async function searchCollection(
@@ -348,41 +321,48 @@ async function searchCollection(
   kind: ResultKind,
   onlyAthar: boolean,
 ): Promise<SearchResult[]> {
-  const q = normalize(query);
-  const qT = tokens(query);
+  const q = prepareQuery(query);
+  const intent = parseIntent(query);
   const catalog = onlyAthar ? ATHAR_BOOKS : HADITH_BOOKS;
   const books = catalog.filter((b) => !bookIds.length || bookIds.includes(b.id));
-  const out: SearchResult[] = [];
-  const ref = parseHadithNumber(query, books);
+  const requestedBook = detectBook(query, catalog);
+  const top = new TopK<SearchResult>(60);
+  const exacts: SearchResult[] = [];
 
-  for (const book of books) {
-    const data = await getBook(book.id);
-    if (!data) continue;
+  await Promise.all(
+    books.map(async (book) => {
+      const data = await getBook(book.id);
+      if (!data) return;
 
-    if (ref && (!ref.bookId || ref.bookId === book.id)) {
-      const exact = data.hadiths.find((h) => h.hadithnumber === ref.number);
-      if (exact && (!onlyAthar || isAthar(exact.text))) {
-        out.push(hadithResult(book.id, exact, kind, 1000));
+      // explicit "<book> <number>" reference
+      if (intent.number && (!requestedBook || requestedBook === book.id)) {
+        const exact = data.hadiths.find((h) => h.hadithnumber === intent.number);
+        if (exact) {
+          const n = normalize(exact.text);
+          if (!onlyAthar || isAthar(n)) exacts.push(hadithResult(book.id, exact, kind, 100));
+        }
       }
-    }
 
-    if (!qT.length) continue;
-    let taken = 0;
-    for (const h of data.hadiths) {
-      if (taken >= 60) break;
-      if (onlyAthar && !isAthar(h.text)) continue;
-      const s = scoreText(h.text, q, qT);
-      if (s <= 0) continue;
-      out.push(hadithResult(book.id, h, kind, s));
-      taken++;
-    }
-  }
+      if (!q.tokens.length) return;
+      const bookBoost = requestedBook === book.id ? 6 : 0;
+      for (const h of data.hadiths) {
+        const n = normalize(h.text);
+        if (onlyAthar && !isAthar(n)) continue;
+        let s = scoreText(h.text, q);
+        // person query: strongly favour texts whose chain names that person
+        if (intent.person && n.includes(intent.person)) s = Math.max(s, 72) + 8;
+        if (s <= 18) continue;
+        s = Math.min(99, s + bookBoost);
+        top.push(hadithResult(book.id, h, kind, s), s);
+      }
+    }),
+  );
 
   const seen = new Set<string>();
-  return out
+  return [...exacts, ...top.values()]
     .sort((a, b) => b.score - a.score)
     .filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)))
-    .slice(0, 40);
+    .slice(0, 60);
 }
 
 export const searchHadith = (query: string, bookIds?: string[]) =>
@@ -394,19 +374,19 @@ export const searchAthar = (query: string, bookIds?: string[]) =>
 /* ---------------- unified (smart) search ---------------- */
 
 export async function searchAll(query: string): Promise<SearchResult[]> {
+  const intent = parseIntent(query);
   const [quran, hadith, athar] = await Promise.all([
     searchQuran(query).catch(() => []),
     searchHadith(query).catch(() => []),
-    searchAthar(query).catch(() => []),
+    intent.person || !intent.numberOnly ? searchAthar(query).catch(() => []) : Promise.resolve([]),
   ]);
-  // an exact ayah reference (e.g. "البقرة 255") should not be drowned by
-  // hadith entries that merely share the same number
-  const exactAyah = quran.some((r) => r.score >= 1000);
-  const demote = (r: SearchResult) =>
-    exactAyah && r.score >= 1000 ? { ...r, score: 250 } : r;
-  return [
-    ...quran.slice(0, 15),
-    ...hadith.slice(0, 15).map(demote),
-    ...athar.slice(0, 10).map(demote),
-  ].sort((a, b) => b.score - a.score);
+
+  // an exact ayah reference must not be tied with hadiths sharing that number
+  const exactAyah = quran.some((r) => r.score >= 100);
+  const adjust = (r: SearchResult) =>
+    exactAyah && r.score >= 100 ? { ...r, score: 80 } : r;
+
+  return [...quran.slice(0, 25), ...hadith.slice(0, 25).map(adjust), ...athar.slice(0, 20).map(adjust)].sort(
+    (a, b) => b.score - a.score,
+  );
 }
