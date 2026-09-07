@@ -77,6 +77,37 @@ async function getSurahAyahs(num: number): Promise<Ayah[]> {
   return ayahs;
 }
 
+/** removes replacement chars / control chars that leak from upstream datasets */
+export function sanitizeText(t: string) {
+  return t
+    .replace(/[\uFFFD\u0000-\u001F\u200B-\u200F\u202A-\u202E]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** well-known ayah nicknames people search by name, not by text */
+const FAMOUS_AYAT: { keys: string[]; surah: number; from: number; to?: number }[] = [
+  { keys: ["ايه الكرسي", "ايت الكرسي", "الكرسي"], surah: 2, from: 255 },
+  { keys: ["ايه الدين", "ايت الدين", "اطول ايه"], surah: 2, from: 282 },
+  { keys: ["خواتيم البقره", "اواخر البقره"], surah: 2, from: 285, to: 286 },
+  { keys: ["ايه النور"], surah: 24, from: 35 },
+  { keys: ["ايه المباهله"], surah: 3, from: 61 },
+  { keys: ["ايه الميراث"], surah: 4, from: 11 },
+  { keys: ["ايه التطهير"], surah: 33, from: 33 },
+  { keys: ["ايه الوضوء"], surah: 5, from: 6 },
+  { keys: ["ايه الامانه"], surah: 4, from: 58 },
+  { keys: ["ايه الصيام"], surah: 2, from: 183 },
+  { keys: ["ايه الحجاب"], surah: 33, from: 59 },
+  { keys: ["ايه الكلاله"], surah: 4, from: 176 },
+  { keys: ["ايه الرباء", "ايه الربا"], surah: 2, from: 275 },
+];
+
+function matchFamousAyah(query: string) {
+  const n = normalize(query);
+  for (const f of FAMOUS_AYAT) if (f.keys.some((k) => n.includes(k))) return f;
+  return null;
+}
+
 function ayahResult(s: SurahMeta, a: Ayah, score: number): SearchResult {
   const clean = s.name.replace(/^سُورَةُ\s*/, "");
   return {
@@ -84,7 +115,7 @@ function ayahResult(s: SurahMeta, a: Ayah, score: number): SearchResult {
     kind: "ayah",
     title: `${clean} — الآية ${a.numberInSurah}`,
     url: `https://quran.com/${s.number}/${a.numberInSurah}`,
-    snippet: a.text,
+    snippet: sanitizeText(a.text),
     domain: "القرآن الكريم",
     reference: `[${clean}: ${a.numberInSurah}]`,
     score,
@@ -155,6 +186,21 @@ export async function searchQuran(query: string): Promise<SearchResult[]> {
   };
 
   const list = await getSurahs();
+
+  // 0) famous ayah nicknames ("آية الكرسي", "خواتيم البقرة", …)
+  const famous = matchFamousAyah(query);
+  if (famous) {
+    const s = list.find((x) => x.number === famous.surah);
+    if (s) {
+      const ayahs = await getSurahAyahs(s.number);
+      const to = famous.to ?? famous.from;
+      for (const a of ayahs) {
+        if (a.numberInSurah >= famous.from && a.numberInSurah <= to) add(ayahResult(s, a, 100));
+        else if (Math.abs(a.numberInSurah - famous.from) <= 2) add(ayahResult(s, a, 88));
+      }
+      add(surahResult(s, 70));
+    }
+  }
 
   // 1) explicit ayah reference: "2:255" or "البقرة 255"
   let refSurah: SurahMeta | undefined;
@@ -275,7 +321,7 @@ function hadithResult(
 ): SearchResult {
   const name = NAME_BY_ID.get(bookId) ?? bookId;
   const grade = h.grades?.find((g) => g.grade)?.grade;
-  const text = h.text.replace(/\s+/g, " ").trim();
+  const text = sanitizeText(h.text);
   return {
     id: `${kind}-${bookId}-${h.hadithnumber}`,
     kind,
@@ -383,10 +429,27 @@ export async function searchAll(query: string): Promise<SearchResult[]> {
 
   // an exact ayah reference must not be tied with hadiths sharing that number
   const exactAyah = quran.some((r) => r.score >= 100);
-  const adjust = (r: SearchResult) =>
-    exactAyah && r.score >= 100 ? { ...r, score: 80 } : r;
+  const adjust = (r: SearchResult) => (exactAyah && r.score >= 100 ? { ...r, score: 80 } : r);
 
-  return [...quran.slice(0, 25), ...hadith.slice(0, 25).map(adjust), ...athar.slice(0, 20).map(adjust)].sort(
-    (a, b) => b.score - a.score,
-  );
+  // a verbatim Quran phrase must outrank a hadith that merely quotes it
+  const qNorm = normalize(query);
+  const quranPhrase =
+    qNorm.length > 8 && quran.some((r) => r.kind === "ayah" && normalize(r.snippet).includes(qNorm));
+  const boost = (r: SearchResult) =>
+    quranPhrase && r.kind === "ayah" ? { ...r, score: Math.min(100, r.score + 12) } : r;
+
+  const merged = [
+    ...quran.slice(0, 25).map(boost),
+    ...hadith.slice(0, 25).map(adjust),
+    ...athar.slice(0, 20).map(adjust),
+  ].sort((a, b) => b.score - a.score);
+
+  // one card per source: an athar and a hadith can point at the same text
+  const seen = new Set<string>();
+  return merged.filter((r) => {
+    const key = `${r.url}|${normalize(r.snippet).slice(0, 90)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }

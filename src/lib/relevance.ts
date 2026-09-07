@@ -110,10 +110,14 @@ export function scoreText(text: string, q: PreparedQuery): number {
   if (coverage <= 0) return 0;
 
   let score = coverage * 62;
-  if (q.norm.length > 2 && n.includes(q.norm)) score += 24;
-  else if (q.tokens.length > 1 && inOrder(words, q.stems, wordStems)) score += 9;
-  // shorter texts answer the question faster
-  score += Math.max(0, 7 - n.length / 260);
+  if (q.norm.length > 2 && n.includes(q.norm)) {
+    // full-phrase match: the richer passage answers better than a bare fragment
+    score += 24 + Math.min(6, n.length / 60);
+  } else {
+    if (q.tokens.length > 1 && inOrder(words, q.stems, wordStems)) score += 9;
+    // shorter texts answer the question faster
+    score += Math.max(0, 7 - n.length / 260);
+  }
   return Math.min(100, Math.round(score * 10) / 10);
 }
 

@@ -145,7 +145,7 @@ function SearchPage() {
                   : "border-border text-muted-foreground"
               }`}
             >
-              كل الكتب
+              {isWeb ? "كل المصادر" : "كل الكتب"}
             </button>
             {category.filters.map((f) => (
               <button
