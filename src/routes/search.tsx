@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Loader2, Filter, Moon, Sun } from "lucide-react";
 import { CATEGORIES, getCategory } from "@/lib/categories";
 import { webSearch } from "@/lib/search.functions";
-import { ResultCard } from "@/components/ResultCard";
+import { AnswerCard } from "@/components/AnswerCard";
+import { ResultGroup } from "@/components/ResultGroup";
 import { WebResults } from "@/components/WebResults";
 import { Omnibox } from "@/components/Omnibox";
 
