@@ -187,6 +187,21 @@ export async function searchQuran(query: string): Promise<SearchResult[]> {
 
   const list = await getSurahs();
 
+  // 0) famous ayah nicknames ("آية الكرسي", "خواتيم البقرة", …)
+  const famous = matchFamousAyah(query);
+  if (famous) {
+    const s = list.find((x) => x.number === famous.surah);
+    if (s) {
+      const ayahs = await getSurahAyahs(s.number);
+      const to = famous.to ?? famous.from;
+      for (const a of ayahs) {
+        if (a.numberInSurah >= famous.from && a.numberInSurah <= to) add(ayahResult(s, a, 100));
+        else if (Math.abs(a.numberInSurah - famous.from) <= 2) add(ayahResult(s, a, 88));
+      }
+      add(surahResult(s, 70));
+    }
+  }
+
   // 1) explicit ayah reference: "2:255" or "البقرة 255"
   let refSurah: SurahMeta | undefined;
   let refAyah: number | undefined;
