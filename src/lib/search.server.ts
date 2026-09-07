@@ -77,6 +77,37 @@ async function getSurahAyahs(num: number): Promise<Ayah[]> {
   return ayahs;
 }
 
+/** removes replacement chars / control chars that leak from upstream datasets */
+export function sanitizeText(t: string) {
+  return t
+    .replace(/[\uFFFD\u0000-\u001F\u200B-\u200F\u202A-\u202E]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** well-known ayah nicknames people search by name, not by text */
+const FAMOUS_AYAT: { keys: string[]; surah: number; from: number; to?: number }[] = [
+  { keys: ["ايه الكرسي", "ايت الكرسي", "الكرسي"], surah: 2, from: 255 },
+  { keys: ["ايه الدين", "ايت الدين", "اطول ايه"], surah: 2, from: 282 },
+  { keys: ["خواتيم البقره", "اواخر البقره"], surah: 2, from: 285, to: 286 },
+  { keys: ["ايه النور"], surah: 24, from: 35 },
+  { keys: ["ايه المباهله"], surah: 3, from: 61 },
+  { keys: ["ايه الميراث"], surah: 4, from: 11 },
+  { keys: ["ايه التطهير"], surah: 33, from: 33 },
+  { keys: ["ايه الوضوء"], surah: 5, from: 6 },
+  { keys: ["ايه الامانه"], surah: 4, from: 58 },
+  { keys: ["ايه الصيام"], surah: 2, from: 183 },
+  { keys: ["ايه الحجاب"], surah: 33, from: 59 },
+  { keys: ["ايه الكلاله"], surah: 4, from: 176 },
+  { keys: ["ايه الرباء", "ايه الربا"], surah: 2, from: 275 },
+];
+
+function matchFamousAyah(query: string) {
+  const n = normalize(query);
+  for (const f of FAMOUS_AYAT) if (f.keys.some((k) => n.includes(k))) return f;
+  return null;
+}
+
 function ayahResult(s: SurahMeta, a: Ayah, score: number): SearchResult {
   const clean = s.name.replace(/^سُورَةُ\s*/, "");
   return {
@@ -84,7 +115,7 @@ function ayahResult(s: SurahMeta, a: Ayah, score: number): SearchResult {
     kind: "ayah",
     title: `${clean} — الآية ${a.numberInSurah}`,
     url: `https://quran.com/${s.number}/${a.numberInSurah}`,
-    snippet: a.text,
+    snippet: sanitizeText(a.text),
     domain: "القرآن الكريم",
     reference: `[${clean}: ${a.numberInSurah}]`,
     score,
