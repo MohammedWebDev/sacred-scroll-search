@@ -5,7 +5,8 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Loader2, Filter, Moon, Sun } from "lucide-react";
 import { CATEGORIES, getCategory } from "@/lib/categories";
 import { webSearch } from "@/lib/search.functions";
-import { ResultCard } from "@/components/ResultCard";
+import { AnswerCard } from "@/components/AnswerCard";
+import { ResultGroup } from "@/components/ResultGroup";
 import { WebResults } from "@/components/WebResults";
 import { Omnibox } from "@/components/Omnibox";
 
@@ -44,28 +45,32 @@ function SearchPage() {
   const navigate = useNavigate();
   const category = getCategory(cat);
   const [term, setTerm] = useState(q);
+  const [limit, setLimit] = useState(12);
 
   const { theme, toggle } = useTheme();
 
   useEffect(() => setTerm(q), [q]);
+  useEffect(() => setLimit(12), [q, cat, book]);
 
   const runSearch = useServerFn(webSearch);
 
   const isWeb = category.id === "web";
 
   const { data, isFetching } = useQuery({
-    queryKey: ["search", q, category.id, book ?? "all"],
+    queryKey: ["search", q, category.id, book ?? "all", limit],
     queryFn: () =>
       runSearch({
-        data: { query: q, category: category.id, ...(book ? { book } : {}) },
+        data: { query: q, category: category.id, limit, ...(book ? { book } : {}) },
       }),
     enabled: !isWeb && q.trim().length > 0,
     staleTime: 5 * 60 * 1000,
+    placeholderData: (prev) => prev,
   });
 
   useEffect(() => {
     if (data) bumpStats({ searches: 1, results: data.results.length });
   }, [data]);
+
 
 
   const go = (next: Partial<SearchParams>) =>
@@ -174,36 +179,74 @@ function SearchPage() {
           )
         ) : (
           <>
-            {isFetching && (
-              <div className="mt-10 flex items-center justify-center gap-2 text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" /> جارٍ البحث في المصادر…
+            {isFetching && !data && (
+              <div className="mt-6 space-y-3">
+                {[0, 1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="h-28 animate-pulse rounded-2xl border border-border bg-card"
+                  />
+                ))}
               </div>
             )}
 
-            {!isFetching && data && (
+            {data && (
               <>
-                <p className="mt-6 text-xs text-muted-foreground">
-                  {data.results.length > 0
-                    ? `${data.results.length} نتيجة عن «${q}» ضمن ${category.label}`
-                    : "لا توجد نتائج"}
-                </p>
+                {(() => {
+                  const [best, ...rest] = data.results;
+                  const groups: { kind: string; items: typeof data.results }[] = [
+                    "ayah",
+                    "surah",
+                    "hadith",
+                    "athar",
+                  ].map((kind) => ({ kind, items: rest.filter((r) => r.kind === kind) }));
 
-                <ul className="mt-3 space-y-3">
-                  {data.results.map((r) => (
-                    <ResultCard key={r.id} result={r} query={q} />
-                  ))}
-                </ul>
+                  return (
+                    <>
+                      <p className="mt-6 text-xs text-muted-foreground">
+                        {data.total > 0
+                          ? `${data.total} نتيجة عن «${q}» ضمن ${category.label}`
+                          : "لا توجد نتائج"}
+                      </p>
 
-                {data.results.length === 0 && (
-                  <div className="mt-8 rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
-                    لم نعثر على نتائج. جرّب اسم السورة، أو رقم الآية (مثل «البقرة 255»)، أو كلمة
-                    أخرى، أو اختر تصنيف «الكل».
-                  </div>
-                )}
+                      {best && <AnswerCard result={best} query={q} />}
+
+                      {groups.map((g) => (
+                        <ResultGroup key={g.kind} kind={g.kind} results={g.items} query={q} />
+                      ))}
+
+                      {data.hasMore && (
+                        <div className="mt-6 flex justify-center">
+                          <button
+                            onClick={() => setLimit((n) => n + 12)}
+                            disabled={isFetching}
+                            className="rounded-xl border border-border px-5 py-2.5 text-sm font-semibold transition hover:border-primary hover:text-primary disabled:opacity-60"
+                          >
+                            {isFetching ? (
+                              <span className="inline-flex items-center gap-2">
+                                <Loader2 className="size-4 animate-spin" /> جارٍ التحميل…
+                              </span>
+                            ) : (
+                              "عرض المزيد"
+                            )}
+                          </button>
+                        </div>
+                      )}
+
+                      {data.results.length === 0 && (
+                        <div className="mt-8 rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
+                          لم نعثر على نتائج. جرّب اسم السورة، أو رقم الآية (مثل «البقرة 255»)، أو
+                          كلمة أخرى، أو اختر تصنيف «الكل».
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </>
             )}
           </>
         )}
+
 
       </main>
     </div>
