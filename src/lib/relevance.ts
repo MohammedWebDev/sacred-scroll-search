@@ -112,7 +112,7 @@ export function scoreText(text: string, q: PreparedQuery): number {
   let score = coverage * 62;
   if (q.norm.length > 2 && n.includes(q.norm)) {
     // full-phrase match: the richer passage answers better than a bare fragment
-    score += 24 + Math.min(7, n.length / 300);
+    score += 24 + Math.min(6, n.length / 60);
   } else {
     if (q.tokens.length > 1 && inOrder(words, q.stems, wordStems)) score += 9;
     // shorter texts answer the question faster

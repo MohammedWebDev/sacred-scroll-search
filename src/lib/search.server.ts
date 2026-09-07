@@ -431,8 +431,15 @@ export async function searchAll(query: string): Promise<SearchResult[]> {
   const exactAyah = quran.some((r) => r.score >= 100);
   const adjust = (r: SearchResult) => (exactAyah && r.score >= 100 ? { ...r, score: 80 } : r);
 
+  // a verbatim Quran phrase must outrank a hadith that merely quotes it
+  const qNorm = normalize(query);
+  const quranPhrase =
+    qNorm.length > 8 && quran.some((r) => r.kind === "ayah" && normalize(r.snippet).includes(qNorm));
+  const boost = (r: SearchResult) =>
+    quranPhrase && r.kind === "ayah" ? { ...r, score: Math.min(100, r.score + 12) } : r;
+
   const merged = [
-    ...quran.slice(0, 25),
+    ...quran.slice(0, 25).map(boost),
     ...hadith.slice(0, 25).map(adjust),
     ...athar.slice(0, 20).map(adjust),
   ].sort((a, b) => b.score - a.score);
