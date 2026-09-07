@@ -44,28 +44,32 @@ function SearchPage() {
   const navigate = useNavigate();
   const category = getCategory(cat);
   const [term, setTerm] = useState(q);
+  const [limit, setLimit] = useState(12);
 
   const { theme, toggle } = useTheme();
 
   useEffect(() => setTerm(q), [q]);
+  useEffect(() => setLimit(12), [q, cat, book]);
 
   const runSearch = useServerFn(webSearch);
 
   const isWeb = category.id === "web";
 
   const { data, isFetching } = useQuery({
-    queryKey: ["search", q, category.id, book ?? "all"],
+    queryKey: ["search", q, category.id, book ?? "all", limit],
     queryFn: () =>
       runSearch({
-        data: { query: q, category: category.id, ...(book ? { book } : {}) },
+        data: { query: q, category: category.id, limit, ...(book ? { book } : {}) },
       }),
     enabled: !isWeb && q.trim().length > 0,
     staleTime: 5 * 60 * 1000,
+    placeholderData: (prev) => prev,
   });
 
   useEffect(() => {
     if (data) bumpStats({ searches: 1, results: data.results.length });
   }, [data]);
+
 
 
   const go = (next: Partial<SearchParams>) =>
