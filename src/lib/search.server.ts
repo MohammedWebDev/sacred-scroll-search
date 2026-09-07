@@ -321,7 +321,7 @@ function hadithResult(
 ): SearchResult {
   const name = NAME_BY_ID.get(bookId) ?? bookId;
   const grade = h.grades?.find((g) => g.grade)?.grade;
-  const text = h.text.replace(/\s+/g, " ").trim();
+  const text = sanitizeText(h.text);
   return {
     id: `${kind}-${bookId}-${h.hadithnumber}`,
     kind,
@@ -429,10 +429,20 @@ export async function searchAll(query: string): Promise<SearchResult[]> {
 
   // an exact ayah reference must not be tied with hadiths sharing that number
   const exactAyah = quran.some((r) => r.score >= 100);
-  const adjust = (r: SearchResult) =>
-    exactAyah && r.score >= 100 ? { ...r, score: 80 } : r;
+  const adjust = (r: SearchResult) => (exactAyah && r.score >= 100 ? { ...r, score: 80 } : r);
 
-  return [...quran.slice(0, 25), ...hadith.slice(0, 25).map(adjust), ...athar.slice(0, 20).map(adjust)].sort(
-    (a, b) => b.score - a.score,
-  );
+  const merged = [
+    ...quran.slice(0, 25),
+    ...hadith.slice(0, 25).map(adjust),
+    ...athar.slice(0, 20).map(adjust),
+  ].sort((a, b) => b.score - a.score);
+
+  // one card per source: an athar and a hadith can point at the same text
+  const seen = new Set<string>();
+  return merged.filter((r) => {
+    const key = `${r.url}|${normalize(r.snippet).slice(0, 90)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }

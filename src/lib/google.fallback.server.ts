@@ -6,7 +6,9 @@ export async function toWebFallback(query: string): Promise<WebResult[]> {
   try {
     const { searchAll } = await import("@/lib/search.server");
     const results = await searchAll(query);
-    return results.slice(0, 20).map((r, i) => ({
+    const seen = new Set<string>();
+    const unique = results.filter((r) => (seen.has(r.url) ? false : (seen.add(r.url), true)));
+    return unique.slice(0, 20).map((r, i) => ({
       id: `fallback-${i}-${r.id}`,
       title: r.title,
       link: r.url,
