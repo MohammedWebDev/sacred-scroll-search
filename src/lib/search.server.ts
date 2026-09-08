@@ -288,14 +288,7 @@ export const HADITH_BOOKS = [
   { id: "nawawi", name: "الأربعون النووية", aliases: ["النووية", "الاربعون"] },
 ];
 
-export const ATHAR_BOOKS = [
-  { id: "malik", name: "موطأ مالك", aliases: ["الموطا", "مالك"] },
-  { id: "bukhari", name: "صحيح البخاري", aliases: ["البخاري"] },
-  { id: "muslim", name: "صحيح مسلم", aliases: ["مسلم"] },
-  { id: "abudawud", name: "سنن أبي داود", aliases: ["ابو داود"] },
-];
-
-const NAME_BY_ID = new Map([...HADITH_BOOKS, ...ATHAR_BOOKS].map((b) => [b.id, b.name] as const));
+const NAME_BY_ID = new Map(HADITH_BOOKS.map((b) => [b.id, b.name] as const));
 
 const bookCache = new Map<string, HadithEdition | null>();
 
