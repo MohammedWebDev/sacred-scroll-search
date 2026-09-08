@@ -20,10 +20,13 @@ const HADITH_FILTERS = [
 ];
 
 const ATHAR_FILTERS = [
-  { name: "موطأ مالك", value: "malik" },
-  { name: "صحيح البخاري", value: "bukhari" },
-  { name: "صحيح مسلم", value: "muslim" },
-  { name: "سنن أبي داود", value: "abudawud" },
+  { name: "الزهد لابن المبارك", value: "zuhd-mubarak" },
+  { name: "الزهد لأحمد", value: "zuhd-ahmad" },
+  { name: "حلية الأولياء", value: "hilya" },
+  { name: "مصنف ابن أبي شيبة", value: "musannaf" },
+  { name: "سير أعلام النبلاء", value: "siyar" },
+  { name: "صفة الصفوة", value: "sifat-safwa" },
+  { name: "شعب الإيمان", value: "shuab" },
 ];
 
 export const CATEGORIES: Category[] = [

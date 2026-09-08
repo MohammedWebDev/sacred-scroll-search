@@ -1,5 +1,6 @@
 import { prepareQuery, normalize, scoreText, TopK, type PreparedQuery } from "@/lib/relevance";
 import { parseIntent, detectBook } from "@/lib/query-intent";
+import { ATHAR, ATHAR_SOURCES, type AtharEntry } from "@/lib/athar-data";
 
 export type ResultKind = "ayah" | "surah" | "hadith" | "athar";
 
@@ -287,14 +288,7 @@ export const HADITH_BOOKS = [
   { id: "nawawi", name: "الأربعون النووية", aliases: ["النووية", "الاربعون"] },
 ];
 
-export const ATHAR_BOOKS = [
-  { id: "malik", name: "موطأ مالك", aliases: ["الموطا", "مالك"] },
-  { id: "bukhari", name: "صحيح البخاري", aliases: ["البخاري"] },
-  { id: "muslim", name: "صحيح مسلم", aliases: ["مسلم"] },
-  { id: "abudawud", name: "سنن أبي داود", aliases: ["ابو داود"] },
-];
-
-const NAME_BY_ID = new Map([...HADITH_BOOKS, ...ATHAR_BOOKS].map((b) => [b.id, b.name] as const));
+const NAME_BY_ID = new Map(HADITH_BOOKS.map((b) => [b.id, b.name] as const));
 
 const bookCache = new Map<string, HadithEdition | null>();
 
@@ -335,41 +329,14 @@ function hadithResult(
   };
 }
 
-const PROPHET_MARKERS = [
-  "قال رسول الله",
-  "قال النبي",
-  "سمعت رسول الله",
-  "سمعت النبي",
-  "ان رسول الله",
-  "ان النبي",
-  "يقول رسول الله",
-];
-
-const SAID_BY = /(?:قال|كان|سيل|سئل|عن)\s+([\u0600-\u06FF\s]{3,40}?)\s*(?:رضي الله عنه|رحمه الله)?\s*[:،]?/;
-
-import { ATHAR_NARRATORS } from "@/lib/query-intent";
-
-/** true when the text is a saying of a companion / successor, not a prophetic hadith */
-function isAthar(normText: string) {
-  const narrator = ATHAR_NARRATORS.find((x) => normText.includes(x));
-  if (!narrator) return false;
-  const marfu = PROPHET_MARKERS.some((m) => normText.includes(normalize(m)));
-  if (!marfu) return true;
-  // marfu' chain: only an athar when the narrator's own words are quoted too
-  const idx = normText.indexOf(narrator);
-  const after = normText.slice(idx);
-  return /(?:قال|كان)\s/.test(after) && !PROPHET_MARKERS.some((m) => after.startsWith(normalize(m)));
-}
-
 async function searchCollection(
   query: string,
   bookIds: string[],
   kind: ResultKind,
-  onlyAthar: boolean,
 ): Promise<SearchResult[]> {
   const q = prepareQuery(query);
   const intent = parseIntent(query);
-  const catalog = onlyAthar ? ATHAR_BOOKS : HADITH_BOOKS;
+  const catalog = HADITH_BOOKS;
   const books = catalog.filter((b) => !bookIds.length || bookIds.includes(b.id));
   const requestedBook = detectBook(query, catalog);
   const top = new TopK<SearchResult>(60);
@@ -383,17 +350,13 @@ async function searchCollection(
       // explicit "<book> <number>" reference
       if (intent.number && (!requestedBook || requestedBook === book.id)) {
         const exact = data.hadiths.find((h) => h.hadithnumber === intent.number);
-        if (exact) {
-          const n = normalize(exact.text);
-          if (!onlyAthar || isAthar(n)) exacts.push(hadithResult(book.id, exact, kind, 100));
-        }
+        if (exact) exacts.push(hadithResult(book.id, exact, kind, 100));
       }
 
       if (!q.tokens.length) return;
       const bookBoost = requestedBook === book.id ? 6 : 0;
       for (const h of data.hadiths) {
         const n = normalize(h.text);
-        if (onlyAthar && !isAthar(n)) continue;
         let s = scoreText(h.text, q);
         // person query: strongly favour texts whose chain names that person
         if (intent.person && n.includes(intent.person)) s = Math.max(s, 72) + 8;
@@ -412,10 +375,65 @@ async function searchCollection(
 }
 
 export const searchHadith = (query: string, bookIds?: string[]) =>
-  searchCollection(query, bookIds ?? [], "hadith", false);
+  searchCollection(query, bookIds ?? [], "hadith");
 
-export const searchAthar = (query: string, bookIds?: string[]) =>
-  searchCollection(query, bookIds ?? [], "athar", true);
+/* ---------------- Athar (sayings & stories of the Salaf) ---------------- */
+
+/**
+ * Removes the chain of narration so the reader sees the saying itself.
+ * "حدثنا فلان عن فلان قال: قال عمر: ..." → "قال عمر: ..."
+ */
+export function stripIsnad(text: string) {
+  let t = sanitizeText(text);
+  t = t.replace(
+    /^(?:حدثنا|حدثني|أخبرنا|أخبرني|أنبأنا|نا|ثنا|قرأت على|سمعت)\b[\s\S]{0,400}?(?:قال|قالت)\s*[:؛]?\s*/u,
+    "",
+  );
+  t = t.replace(/^(?:عن|حدثنا|حدثني)\s+[\u0600-\u06FF\s]{2,60}?\s+(?:قال|قالت)\s*[:؛]?\s*/u, "");
+  return t.trim();
+}
+
+const atharUrl = (a: AtharEntry) =>
+  `https://dorar.net/hadith/search?q=${encodeURIComponent(a.text.split(" ").slice(0, 7).join(" "))}`;
+
+function atharResult(a: AtharEntry, i: number, score: number): SearchResult {
+  const src = ATHAR_SOURCES.find((s) => s.id === a.src);
+  const source = src ? `${src.name} — ${src.author}` : a.src;
+  return {
+    id: `athar-${i}`,
+    kind: "athar",
+    title: `${a.by} — ${a.type === "قصة" ? "قصة" : "قول"}`,
+    url: atharUrl(a),
+    snippet: stripIsnad(a.text),
+    domain: source,
+    reference: src ? src.name : source,
+    grade: a.type,
+    score,
+  };
+}
+
+export async function searchAthar(query: string, srcIds?: string[]): Promise<SearchResult[]> {
+  const q = prepareQuery(query);
+  const pool = ATHAR.map((a, i) => ({ a, i })).filter(
+    ({ a }) => !srcIds?.length || srcIds.includes(a.src),
+  );
+  if (!q.tokens.length) {
+    return pool.slice(0, 40).map(({ a, i }) => atharResult(a, i, 60));
+  }
+
+  const out: SearchResult[] = [];
+  for (const { a, i } of pool) {
+    const bySc = scoreText(a.by, q);
+    const tagSc = scoreText(a.tags.join(" "), q);
+    const textSc = scoreText(a.text, q);
+    let s = Math.max(textSc, tagSc * 0.95, bySc);
+    // naming the speaker should surface everything they said
+    if (bySc >= 60) s = Math.min(99, Math.max(s, 82) + 6);
+    if (s <= 18) continue;
+    out.push(atharResult(a, i, Math.round(s * 10) / 10));
+  }
+  return out.sort((x, y) => y.score - x.score).slice(0, 60);
+}
 
 /* ---------------- unified (smart) search ---------------- */
 
