@@ -336,13 +336,14 @@ function hadithResult(
 ): SearchResult {
   const name = NAME_BY_ID.get(bookId) ?? bookId;
   const grade = h.grades?.find((g) => g.grade)?.grade;
-  const text = sanitizeText(h.text);
+  const text = stripIsnad(h.text);
   return {
     id: `${kind}-${bookId}-${h.hadithnumber}`,
     kind,
     title: `${name} — رقم ${h.hadithnumber}`,
     url: `https://sunnah.com/${bookId}:${h.hadithnumber}`,
     snippet: text.length > 700 ? `${text.slice(0, 700)}…` : text,
+
     domain: name,
     reference: `${name} (${h.hadithnumber})`,
     ...(grade ? { grade } : {}),
