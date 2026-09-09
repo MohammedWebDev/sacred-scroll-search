@@ -40,10 +40,22 @@ export async function getSurahs(): Promise<SurahMeta[]> {
 
 const surahClean = (name: string) => normalize(name).replace(/^سوره\s*/, "");
 
+/** true when `needle` appears in `hay` as whole word(s), not as a letter inside a word */
+function containsWord(hay: string, needle: string) {
+  if (!needle) return false;
+  const words = hay.split(" ");
+  const parts = needle.split(" ");
+  for (let i = 0; i + parts.length <= words.length; i++) {
+    if (parts.every((p, j) => words[i + j] === p)) return true;
+  }
+  return false;
+}
+
 async function matchSurahs(query: string) {
   const list = await getSurahs();
   const q = normalize(query).replace(/^سوره\s*/, "").trim();
   if (!q) return [] as { s: SurahMeta; score: number }[];
+  const askedForSurah = /\bسوره\b/.test(normalize(query));
   const out: { s: SurahMeta; score: number }[] = [];
   for (const s of list) {
     const name = surahClean(s.name);
@@ -51,17 +63,21 @@ async function matchSurahs(query: string) {
     const en = s.englishName.toLowerCase().replace(/[^a-z]/g, "");
     const qBare = q.replace(/^ال/, "");
     const qEn = q.replace(/[^a-z]/g, "");
+    // one/two letter names (ق، ص، ن، طه، يس) only count on an exact ask
+    const shortName = bare.length < 3;
     let score = 0;
     if (String(s.number) === q) score = 100;
     else if (name === q || bare === qBare) score = 98;
-    else if (name.startsWith(q) || bare.startsWith(qBare)) score = 88;
-    else if (q.includes(name) || q.includes(bare)) score = 80;
-    else if (name.includes(q) && q.length > 2) score = 70;
+    else if (!shortName && (name.startsWith(q) || bare.startsWith(qBare)) && q.length >= 3) score = 88;
+    else if (!shortName && (containsWord(q, name) || containsWord(q, bare)))
+      score = askedForSurah ? 92 : 80;
+    else if (!shortName && name.includes(q) && q.length > 3) score = 70;
     else if (qEn.length > 2 && (en === qEn || en.startsWith(qEn))) score = 75;
     if (score) out.push({ s, score });
   }
   return out.sort((a, b) => b.score - a.score);
 }
+
 
 type Ayah = { number: number; text: string; numberInSurah: number };
 
