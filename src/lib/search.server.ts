@@ -401,23 +401,41 @@ export const searchHadith = (query: string, bookIds?: string[]) =>
 
 /* ---------------- Athar (sayings & stories of the Salaf) ---------------- */
 
+const DIACRITICS = /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g;
+
 /**
  * Removes the chain of narration so the reader sees the saying itself.
  * "حدثنا فلان عن فلان قال: قال عمر: ..." → "قال عمر: ..."
+ * Matching ignores diacritics, but the returned text keeps them.
  */
 export function stripIsnad(text: string) {
   const original = sanitizeText(text);
-  let t = original;
-  // drop the reporting chain that opens the text, up to the last "قال" of the chain
-  const chain =
-    /^(?:حدثنا|حدثني|أخبرنا|أخبرنى|أخبرني|أنبأنا|أنبأني|نا|ثنا|قرأت على|سمعت|وحدثنا|وحدثني|وحدثناه|وحدثنيه|وأخبرنا|وأخبرني|عن)\b/u;
-  if (chain.test(t)) {
-    const m = t.match(
-      /^[\s\S]{0,600}?(?:قال|قالت|يقول|أنه قال)\s*[:؛]?\s*(?:رسول الله|النبي)?\s*(?:صلى الله عليه وسلم|صلى الله عليه وآله وسلم)?\s*[:؛]?\s*/u,
-    );
-    if (m && m[0].length < original.length - 20) t = original.slice(m[0].length);
+  // bare copy + map from bare index → original index
+  let bare = "";
+  const map: number[] = [];
+  for (let i = 0; i < original.length; i++) {
+    const ch = original[i]!;
+    DIACRITICS.lastIndex = 0;
+    if (DIACRITICS.test(ch)) continue;
+    bare += ch;
+    map.push(i);
   }
-  t = t.replace(/^(?:رضي الله عنه[ما]?|رحمه الله)\s*[:؛]?\s*/u, "");
+
+  const opener =
+    /^\s*(?:و?حدثنا|و?حدثني|و?حدثناه|و?حدثنيه|و?أخبرنا|و?أخبرني|و?أنبأنا|ثنا|نا|قرأت على|سمعت|عن|حديث)\b/u;
+  if (!opener.test(bare)) return original;
+
+  const m = bare.match(
+    /^[\s\S]{0,600}?(?:قال|قالت|يقول|أنه قال|أنها قالت)\s*[:؛]?\s*(?:رسول الله|النبي|نبي الله)?\s*(?:صلى الله عليه وسلم|صلى الله عليه وآله وسلم)?\s*[:؛]?\s*/u,
+  );
+  if (!m) return original;
+  const cutBare = m[0].length;
+  if (cutBare >= bare.length - 25) return original;
+  const cut = map[cutBare] ?? 0;
+  const rest = original.slice(cut).replace(/^(?:رضي الله عنه[ما]?|رحمه الله)\s*[:؛]?\s*/u, "").trim();
+  return rest || original;
+}
+
   return (t.trim() || original).trim();
 }
 
