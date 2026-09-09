@@ -242,15 +242,20 @@ export async function searchQuran(query: string): Promise<SearchResult[]> {
     }
   }
 
-  // 2) surah name / number
+  // 2) surah name / number — only when the query really is a surah name,
+  //    otherwise a passing word must not flood the page with unrelated ayat
   const nameMatches = await matchSurahs(intent.text || query);
+  const namesOnlyQuery = q.tokens.length <= 2;
   for (const { s, score } of nameMatches.slice(0, 2)) {
-    if (!refAyah) {
-      add(surahResult(s, Math.min(97, score)));
+    if (refAyah || score < 80) continue;
+    if (!namesOnlyQuery && score < 92) continue;
+    add(surahResult(s, Math.min(97, score)));
+    if (score >= 88) {
       const ayahs = await getSurahAyahs(s.number);
       ayahs.slice(0, 10).forEach((a, i) => add(ayahResult(s, a, Math.max(50, score - 10 - i))));
     }
   }
+
 
   // 3) content search
   if (q.tokens.length) {
