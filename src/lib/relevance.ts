@@ -92,11 +92,13 @@ export function scoreText(text: string, q: PreparedQuery): number {
   const wordSet = new Set(words);
 
   let hitSum = 0;
+  let fullHits = 0;
   for (let k = 0; k < q.tokens.length; k++) {
     const t = q.tokens[k]!;
     const st = q.stems[k]!;
     if (wordSet.has(t) || stemSet.has(st)) {
       hitSum += 1;
+      fullHits += 1;
       continue;
     }
     let partial = 0;
@@ -112,6 +114,13 @@ export function scoreText(text: string, q: PreparedQuery): number {
 
   const coverage = hitSum / q.tokens.length;
   if (coverage <= 0) return 0;
+  // a multi-word query must really be answered by the text, not by one fuzzy echo
+  if (q.tokens.length > 1) {
+    if (fullHits === 0) return 0;
+    if (coverage < 0.55) return 0;
+  } else if (fullHits === 0 && coverage < 0.7) {
+    return 0;
+  }
 
   let score = coverage * 62;
   if (q.norm.length > 2 && n.includes(q.norm)) {
@@ -124,6 +133,28 @@ export function scoreText(text: string, q: PreparedQuery): number {
   }
   return Math.min(100, Math.round(score * 10) / 10);
 }
+
+/**
+ * How well a proper name (speaker, author, book) answers the query.
+ * Returns 0..1 = share of the name's own words the query mentions,
+ * so «عبدالله بن المبارك» matches «عبد الله بن المبارك».
+ */
+export function nameMatch(name: string, q: PreparedQuery): number {
+  const parts = normalize(name)
+    .split(" ")
+    .filter((w) => w.length > 1 && !STOP.has(w));
+  if (!parts.length || !q.tokens.length) return 0;
+  const qSet = new Set([...q.tokens, ...q.stems]);
+  let hits = 0;
+  for (const p of parts) if (qSet.has(p) || qSet.has(stem(p))) hits += 1;
+  if (!hits) return 0;
+  // distinctive last name alone ("المبارك", "البصري") is a strong signal
+  const distinctive = parts[parts.length - 1]!;
+  const hasDistinctive = qSet.has(distinctive) || qSet.has(stem(distinctive));
+  const ratio = hits / parts.length;
+  return hasDistinctive ? Math.max(ratio, 0.75) : ratio;
+}
+
 
 function inOrder(words: string[], qStems: string[], wordStems: string[]): boolean {
   let idx = 0;
