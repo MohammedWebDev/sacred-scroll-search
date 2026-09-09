@@ -450,29 +450,36 @@ export async function searchAthar(query: string, srcIds?: string[]): Promise<Sea
     return pool.slice(0, 40).map(({ a, i }) => atharResult(a, i, 60));
   }
 
+  // does the query name a speaker or a source in this corpus?
+  const speakerHit = Math.max(0, ...pool.map(({ a }) => nameMatch(a.by, q)));
+  const isSpeakerQuery = speakerHit >= 0.6;
+
   const out: SearchResult[] = [];
   for (const { a, i } of pool) {
-    const bySc = scoreText(a.by, q);
+    const src = ATHAR_SOURCES.find((s) => s.id === a.src);
+    const byHit = nameMatch(a.by, q);
+    const srcHit = src ? Math.max(nameMatch(src.name, q), nameMatch(src.author, q)) : 0;
     const tagSc = scoreText(a.tags.join(" "), q);
     const textSc = scoreText(a.text, q);
-    let s = Math.max(textSc, tagSc * 0.95, bySc);
-    // naming the speaker should surface everything they said
-    if (bySc >= 60) s = Math.min(99, Math.max(s, 82) + 6);
-    if (s <= 18) continue;
+    const topic = Math.max(textSc, tagSc * 0.95);
+
+    let s = topic;
+    if (byHit >= 0.6) {
+      // naming the speaker surfaces everything they said, best topical match first
+      s = Math.min(99, 82 + byHit * 6 + Math.min(11, topic / 8));
+    } else if (isSpeakerQuery) {
+      // another speaker only belongs here when it answers the topic strongly
+      if (topic < 60) continue;
+      s = topic - 10;
+    } else if (srcHit >= 0.6) {
+      s = Math.max(s, 74 + Math.min(12, topic / 8));
+    }
+    if (s < 30) continue;
     out.push(atharResult(a, i, Math.round(s * 10) / 10));
   }
   return out.sort((x, y) => y.score - x.score).slice(0, 60);
 }
 
-/* ---------------- unified (smart) search ---------------- */
-
-export async function searchAll(query: string): Promise<SearchResult[]> {
-  const intent = parseIntent(query);
-  const [quran, hadith, athar] = await Promise.all([
-    searchQuran(query).catch(() => []),
-    searchHadith(query).catch(() => []),
-    intent.person || !intent.numberOnly ? searchAthar(query).catch(() => []) : Promise.resolve([]),
-  ]);
 
   // an exact ayah reference must not be tied with hadiths sharing that number
   const exactAyah = quran.some((r) => r.score >= 100);
