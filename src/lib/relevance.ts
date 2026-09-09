@@ -19,6 +19,8 @@ export const normalize = (s: string) =>
     .replace(/ؤ/g, "و")
     .replace(/ئ/g, "ي")
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    // «عبدالله» ≈ «عبد الله» ، «عبدالرحمن» ≈ «عبد الرحمن»
+    .replace(/عبدال/g, "عبد ال")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
@@ -34,10 +36,12 @@ export function stem(word: string): string {
 }
 
 export const STOP = new Set([
-  "سوره", "ايه", "الايه", "الايات", "ايات", "حديث", "الحديث", "احاديث", "اثر", "الاثر",
-  "في", "من", "عن", "علي", "الي", "ما", "هو", "هي", "قول", "باب", "رقم", "كتاب", "ال",
+  "سوره", "ايه", "الايه", "الايات", "ايات", "حديث", "الحديث", "احاديث", "اثر", "الاثر", "الاثار",
+  "في", "من", "عن", "علي", "الي", "ما", "هو", "هي", "قول", "اقوال", "مقولات", "اقول",
+  "كلام", "قصه", "قصص", "حول", "عند", "باب", "رقم", "كتاب", "ال", "بن", "ابن",
   "the", "of", "and", "a",
 ]);
+
 
 export type PreparedQuery = {
   raw: string;
@@ -88,11 +92,13 @@ export function scoreText(text: string, q: PreparedQuery): number {
   const wordSet = new Set(words);
 
   let hitSum = 0;
+  let fullHits = 0;
   for (let k = 0; k < q.tokens.length; k++) {
     const t = q.tokens[k]!;
     const st = q.stems[k]!;
     if (wordSet.has(t) || stemSet.has(st)) {
       hitSum += 1;
+      fullHits += 1;
       continue;
     }
     let partial = 0;
@@ -108,6 +114,13 @@ export function scoreText(text: string, q: PreparedQuery): number {
 
   const coverage = hitSum / q.tokens.length;
   if (coverage <= 0) return 0;
+  // a multi-word query must really be answered by the text, not by one fuzzy echo
+  if (q.tokens.length > 1) {
+    if (fullHits === 0) return 0;
+    if (coverage < 0.55) return 0;
+  } else if (fullHits === 0 && coverage < 0.7) {
+    return 0;
+  }
 
   let score = coverage * 62;
   if (q.norm.length > 2 && n.includes(q.norm)) {
@@ -120,6 +133,41 @@ export function scoreText(text: string, q: PreparedQuery): number {
   }
   return Math.min(100, Math.round(score * 10) / 10);
 }
+
+/** name words shared by hundreds of people — never identifying on their own */
+const COMMON_NAME_WORDS = new Set([
+  "عبد", "الله", "ابو", "ابي", "ام", "بنت", "الدين", "محمد", "احمد", "علي", "عبدالله",
+]);
+
+/**
+ * How well a proper name (speaker, author, book) answers the query.
+ * Returns 0..1. The distinctive part of the name («المبارك»، «الثوري») must be
+ * present, otherwise «عبد الله بن مسعود» would answer «عبد الله بن المبارك».
+ */
+export function nameMatch(name: string, q: PreparedQuery): number {
+  const parts = normalize(name)
+    .split(" ")
+    .filter((w) => w.length > 1 && !STOP.has(w));
+  if (!parts.length || !q.tokens.length) return 0;
+  const qSet = new Set([...q.tokens, ...q.stems]);
+  const has = (p: string) => qSet.has(p) || qSet.has(stem(p));
+
+  let hits = 0;
+  for (const p of parts) if (has(p)) hits += 1;
+  if (!hits) return 0;
+
+  const distinctive = parts.filter((p) => !COMMON_NAME_WORDS.has(p));
+  // every distinctive word of the name must be named by the query
+  if (distinctive.length) {
+    const distinctiveHits = distinctive.filter(has).length;
+    if (distinctiveHits === 0) return 0;
+    if (distinctiveHits < distinctive.length) return 0.3 * (distinctiveHits / distinctive.length);
+    return Math.max(0.8, hits / parts.length);
+  }
+  return hits === parts.length ? 0.8 : 0.3;
+}
+
+
 
 function inOrder(words: string[], qStems: string[], wordStems: string[]): boolean {
   let idx = 0;

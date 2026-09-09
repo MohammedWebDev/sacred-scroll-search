@@ -1,4 +1,4 @@
-import { prepareQuery, normalize, scoreText, TopK, type PreparedQuery } from "@/lib/relevance";
+import { prepareQuery, normalize, scoreText, nameMatch, TopK, type PreparedQuery } from "@/lib/relevance";
 import { parseIntent, detectBook } from "@/lib/query-intent";
 import { ATHAR, ATHAR_SOURCES, type AtharEntry } from "@/lib/athar-data";
 
@@ -40,10 +40,22 @@ export async function getSurahs(): Promise<SurahMeta[]> {
 
 const surahClean = (name: string) => normalize(name).replace(/^سوره\s*/, "");
 
+/** true when `needle` appears in `hay` as whole word(s), not as a letter inside a word */
+function containsWord(hay: string, needle: string) {
+  if (!needle) return false;
+  const words = hay.split(" ");
+  const parts = needle.split(" ");
+  for (let i = 0; i + parts.length <= words.length; i++) {
+    if (parts.every((p, j) => words[i + j] === p)) return true;
+  }
+  return false;
+}
+
 async function matchSurahs(query: string) {
   const list = await getSurahs();
   const q = normalize(query).replace(/^سوره\s*/, "").trim();
   if (!q) return [] as { s: SurahMeta; score: number }[];
+  const askedForSurah = /\bسوره\b/.test(normalize(query));
   const out: { s: SurahMeta; score: number }[] = [];
   for (const s of list) {
     const name = surahClean(s.name);
@@ -51,17 +63,21 @@ async function matchSurahs(query: string) {
     const en = s.englishName.toLowerCase().replace(/[^a-z]/g, "");
     const qBare = q.replace(/^ال/, "");
     const qEn = q.replace(/[^a-z]/g, "");
+    // one/two letter names (ق، ص، ن، طه، يس) only count on an exact ask
+    const shortName = bare.length < 3;
     let score = 0;
     if (String(s.number) === q) score = 100;
     else if (name === q || bare === qBare) score = 98;
-    else if (name.startsWith(q) || bare.startsWith(qBare)) score = 88;
-    else if (q.includes(name) || q.includes(bare)) score = 80;
-    else if (name.includes(q) && q.length > 2) score = 70;
+    else if (!shortName && (name.startsWith(q) || bare.startsWith(qBare)) && q.length >= 3) score = 88;
+    else if (!shortName && (containsWord(q, name) || containsWord(q, bare)))
+      score = askedForSurah ? 92 : 80;
+    else if (!shortName && name.includes(q) && q.length > 3) score = 70;
     else if (qEn.length > 2 && (en === qEn || en.startsWith(qEn))) score = 75;
     if (score) out.push({ s, score });
   }
   return out.sort((a, b) => b.score - a.score);
 }
+
 
 type Ayah = { number: number; text: string; numberInSurah: number };
 
@@ -226,15 +242,20 @@ export async function searchQuran(query: string): Promise<SearchResult[]> {
     }
   }
 
-  // 2) surah name / number
+  // 2) surah name / number — only when the query really is a surah name,
+  //    otherwise a passing word must not flood the page with unrelated ayat
   const nameMatches = await matchSurahs(intent.text || query);
+  const namesOnlyQuery = q.tokens.length <= 2;
   for (const { s, score } of nameMatches.slice(0, 2)) {
-    if (!refAyah) {
-      add(surahResult(s, Math.min(97, score)));
+    if (refAyah || score < 80) continue;
+    if (!namesOnlyQuery && score < 92) continue;
+    add(surahResult(s, Math.min(97, score)));
+    if (score >= 88) {
       const ayahs = await getSurahAyahs(s.number);
       ayahs.slice(0, 10).forEach((a, i) => add(ayahResult(s, a, Math.max(50, score - 10 - i))));
     }
   }
+
 
   // 3) content search
   if (q.tokens.length) {
@@ -315,13 +336,14 @@ function hadithResult(
 ): SearchResult {
   const name = NAME_BY_ID.get(bookId) ?? bookId;
   const grade = h.grades?.find((g) => g.grade)?.grade;
-  const text = sanitizeText(h.text);
+  const text = stripIsnad(h.text);
   return {
     id: `${kind}-${bookId}-${h.hadithnumber}`,
     kind,
     title: `${name} — رقم ${h.hadithnumber}`,
     url: `https://sunnah.com/${bookId}:${h.hadithnumber}`,
     snippet: text.length > 700 ? `${text.slice(0, 700)}…` : text,
+
     domain: name,
     reference: `${name} (${h.hadithnumber})`,
     ...(grade ? { grade } : {}),
@@ -379,19 +401,44 @@ export const searchHadith = (query: string, bookIds?: string[]) =>
 
 /* ---------------- Athar (sayings & stories of the Salaf) ---------------- */
 
+const DIACRITICS = /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g;
+
 /**
  * Removes the chain of narration so the reader sees the saying itself.
  * "حدثنا فلان عن فلان قال: قال عمر: ..." → "قال عمر: ..."
+ * Matching ignores diacritics, but the returned text keeps them.
  */
 export function stripIsnad(text: string) {
-  let t = sanitizeText(text);
-  t = t.replace(
-    /^(?:حدثنا|حدثني|أخبرنا|أخبرني|أنبأنا|نا|ثنا|قرأت على|سمعت)\b[\s\S]{0,400}?(?:قال|قالت)\s*[:؛]?\s*/u,
-    "",
+  const original = sanitizeText(text);
+  // bare copy + map from bare index → original index
+  let bare = "";
+  const map: number[] = [];
+  for (let i = 0; i < original.length; i++) {
+    const ch = original[i]!;
+    DIACRITICS.lastIndex = 0;
+    if (DIACRITICS.test(ch)) continue;
+    bare += ch;
+    map.push(i);
+  }
+
+  const opener =
+    /^\s*(?:و?حدثنا|و?حدثني|و?حدثناه|و?حدثنيه|و?أخبرنا|و?أخبرني|و?أنبأنا|ثنا|نا|قرأت على|سمعت|عن|حديث)\b/u;
+  if (!opener.test(bare)) return original;
+
+  const m = bare.match(
+    /^[\s\S]{0,600}?(?:قال|قالت|يقول|أنه قال|أنها قالت)\s*[:؛]?\s*(?:رسول الله|النبي|نبي الله)?\s*(?:صلى الله عليه وسلم|صلى الله عليه وآله وسلم)?\s*[:؛]?\s*/u,
   );
-  t = t.replace(/^(?:عن|حدثنا|حدثني)\s+[\u0600-\u06FF\s]{2,60}?\s+(?:قال|قالت)\s*[:؛]?\s*/u, "");
-  return t.trim();
+  if (!m) return original;
+  const cutBare = m[0].length;
+  if (cutBare >= bare.length - 25) return original;
+  const cut = map[cutBare] ?? 0;
+  const rest = original.slice(cut).replace(/^(?:رضي الله عنه[ما]?|رحمه الله)\s*[:؛]?\s*/u, "").trim();
+  return rest || original;
 }
+
+  return (t.trim() || original).trim();
+}
+
 
 const atharUrl = (a: AtharEntry) =>
   `https://dorar.net/hadith/search?q=${encodeURIComponent(a.text.split(" ").slice(0, 7).join(" "))}`;
@@ -421,15 +468,31 @@ export async function searchAthar(query: string, srcIds?: string[]): Promise<Sea
     return pool.slice(0, 40).map(({ a, i }) => atharResult(a, i, 60));
   }
 
+  // does the query name a speaker or a source in this corpus?
+  const speakerHit = Math.max(0, ...pool.map(({ a }) => nameMatch(a.by, q)));
+  const isSpeakerQuery = speakerHit >= 0.6;
+
   const out: SearchResult[] = [];
   for (const { a, i } of pool) {
-    const bySc = scoreText(a.by, q);
+    const src = ATHAR_SOURCES.find((s) => s.id === a.src);
+    const byHit = nameMatch(a.by, q);
+    const srcHit = src ? Math.max(nameMatch(src.name, q), nameMatch(src.author, q)) : 0;
     const tagSc = scoreText(a.tags.join(" "), q);
     const textSc = scoreText(a.text, q);
-    let s = Math.max(textSc, tagSc * 0.95, bySc);
-    // naming the speaker should surface everything they said
-    if (bySc >= 60) s = Math.min(99, Math.max(s, 82) + 6);
-    if (s <= 18) continue;
+    const topic = Math.max(textSc, tagSc * 0.95);
+
+    let s = topic;
+    if (byHit >= 0.6) {
+      // naming the speaker surfaces everything they said, best topical match first
+      s = Math.min(99, 82 + byHit * 6 + Math.min(11, topic / 8));
+    } else if (isSpeakerQuery) {
+      // another speaker only belongs here when it answers the topic strongly
+      if (topic < 60) continue;
+      s = topic - 10;
+    } else if (srcHit >= 0.6) {
+      s = Math.max(s, 74 + Math.min(12, topic / 8));
+    }
+    if (s < 30) continue;
     out.push(atharResult(a, i, Math.round(s * 10) / 10));
   }
   return out.sort((x, y) => y.score - x.score).slice(0, 60);
@@ -442,7 +505,7 @@ export async function searchAll(query: string): Promise<SearchResult[]> {
   const [quran, hadith, athar] = await Promise.all([
     searchQuran(query).catch(() => []),
     searchHadith(query).catch(() => []),
-    intent.person || !intent.numberOnly ? searchAthar(query).catch(() => []) : Promise.resolve([]),
+    intent.numberOnly ? Promise.resolve([]) : searchAthar(query).catch(() => []),
   ]);
 
   // an exact ayah reference must not be tied with hadiths sharing that number
@@ -456,11 +519,17 @@ export async function searchAll(query: string): Promise<SearchResult[]> {
   const boost = (r: SearchResult) =>
     quranPhrase && r.kind === "ayah" ? { ...r, score: Math.min(100, r.score + 12) } : r;
 
+  // asking about a person of the Salaf: their own words answer better than an isnad echo
+  const salafQuery = athar.some((r) => r.kind === "athar" && r.score >= 82);
+  const demote = (r: SearchResult) =>
+    salafQuery && r.kind === "hadith" ? { ...r, score: Math.min(r.score, 70) } : r;
+
   const merged = [
     ...quran.slice(0, 25).map(boost),
-    ...hadith.slice(0, 25).map(adjust),
+    ...hadith.slice(0, 25).map(adjust).map(demote),
     ...athar.slice(0, 20).map(adjust),
   ].sort((a, b) => b.score - a.score);
+
 
   // one card per source: an athar and a hadith can point at the same text
   const seen = new Set<string>();
