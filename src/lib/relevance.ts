@@ -134,10 +134,15 @@ export function scoreText(text: string, q: PreparedQuery): number {
   return Math.min(100, Math.round(score * 10) / 10);
 }
 
+/** name words shared by hundreds of people — never identifying on their own */
+const COMMON_NAME_WORDS = new Set([
+  "عبد", "الله", "ابو", "ابي", "ام", "بنت", "الدين", "محمد", "احمد", "علي", "عبدالله",
+]);
+
 /**
  * How well a proper name (speaker, author, book) answers the query.
- * Returns 0..1 = share of the name's own words the query mentions,
- * so «عبدالله بن المبارك» matches «عبد الله بن المبارك».
+ * Returns 0..1. The distinctive part of the name («المبارك»، «الثوري») must be
+ * present, otherwise «عبد الله بن مسعود» would answer «عبد الله بن المبارك».
  */
 export function nameMatch(name: string, q: PreparedQuery): number {
   const parts = normalize(name)
@@ -145,15 +150,23 @@ export function nameMatch(name: string, q: PreparedQuery): number {
     .filter((w) => w.length > 1 && !STOP.has(w));
   if (!parts.length || !q.tokens.length) return 0;
   const qSet = new Set([...q.tokens, ...q.stems]);
+  const has = (p: string) => qSet.has(p) || qSet.has(stem(p));
+
   let hits = 0;
-  for (const p of parts) if (qSet.has(p) || qSet.has(stem(p))) hits += 1;
+  for (const p of parts) if (has(p)) hits += 1;
   if (!hits) return 0;
-  // distinctive last name alone ("المبارك", "البصري") is a strong signal
-  const distinctive = parts[parts.length - 1]!;
-  const hasDistinctive = qSet.has(distinctive) || qSet.has(stem(distinctive));
-  const ratio = hits / parts.length;
-  return hasDistinctive ? Math.max(ratio, 0.75) : ratio;
+
+  const distinctive = parts.filter((p) => !COMMON_NAME_WORDS.has(p));
+  // every distinctive word of the name must be named by the query
+  if (distinctive.length) {
+    const distinctiveHits = distinctive.filter(has).length;
+    if (distinctiveHits === 0) return 0;
+    if (distinctiveHits < distinctive.length) return 0.3 * (distinctiveHits / distinctive.length);
+    return Math.max(0.8, hits / parts.length);
+  }
+  return hits === parts.length ? 0.8 : 0.3;
 }
+
 
 
 function inOrder(words: string[], qStems: string[], wordStems: string[]): boolean {
