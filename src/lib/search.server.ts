@@ -480,6 +480,15 @@ export async function searchAthar(query: string, srcIds?: string[]): Promise<Sea
   return out.sort((x, y) => y.score - x.score).slice(0, 60);
 }
 
+/* ---------------- unified (smart) search ---------------- */
+
+export async function searchAll(query: string): Promise<SearchResult[]> {
+  const intent = parseIntent(query);
+  const [quran, hadith, athar] = await Promise.all([
+    searchQuran(query).catch(() => []),
+    searchHadith(query).catch(() => []),
+    intent.numberOnly ? Promise.resolve([]) : searchAthar(query).catch(() => []),
+  ]);
 
   // an exact ayah reference must not be tied with hadiths sharing that number
   const exactAyah = quran.some((r) => r.score >= 100);
@@ -492,11 +501,17 @@ export async function searchAthar(query: string, srcIds?: string[]): Promise<Sea
   const boost = (r: SearchResult) =>
     quranPhrase && r.kind === "ayah" ? { ...r, score: Math.min(100, r.score + 12) } : r;
 
+  // asking about a person of the Salaf: their own words answer better than an isnad echo
+  const salafQuery = athar.some((r) => r.kind === "athar" && r.score >= 82);
+  const demote = (r: SearchResult) =>
+    salafQuery && r.kind === "hadith" ? { ...r, score: Math.min(r.score, 70) } : r;
+
   const merged = [
     ...quran.slice(0, 25).map(boost),
-    ...hadith.slice(0, 25).map(adjust),
+    ...hadith.slice(0, 25).map(adjust).map(demote),
     ...athar.slice(0, 20).map(adjust),
   ].sort((a, b) => b.score - a.score);
+
 
   // one card per source: an athar and a hadith can point at the same text
   const seen = new Set<string>();
