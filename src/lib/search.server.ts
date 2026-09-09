@@ -1,4 +1,4 @@
-import { prepareQuery, normalize, scoreText, TopK, type PreparedQuery } from "@/lib/relevance";
+import { prepareQuery, normalize, scoreText, nameMatch, TopK, type PreparedQuery } from "@/lib/relevance";
 import { parseIntent, detectBook } from "@/lib/query-intent";
 import { ATHAR, ATHAR_SOURCES, type AtharEntry } from "@/lib/athar-data";
 
