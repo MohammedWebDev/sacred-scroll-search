@@ -406,14 +406,21 @@ export const searchHadith = (query: string, bookIds?: string[]) =>
  * "حدثنا فلان عن فلان قال: قال عمر: ..." → "قال عمر: ..."
  */
 export function stripIsnad(text: string) {
-  let t = sanitizeText(text);
-  t = t.replace(
-    /^(?:حدثنا|حدثني|أخبرنا|أخبرني|أنبأنا|نا|ثنا|قرأت على|سمعت)\b[\s\S]{0,400}?(?:قال|قالت)\s*[:؛]?\s*/u,
-    "",
-  );
-  t = t.replace(/^(?:عن|حدثنا|حدثني)\s+[\u0600-\u06FF\s]{2,60}?\s+(?:قال|قالت)\s*[:؛]?\s*/u, "");
-  return t.trim();
+  const original = sanitizeText(text);
+  let t = original;
+  // drop the reporting chain that opens the text, up to the last "قال" of the chain
+  const chain =
+    /^(?:حدثنا|حدثني|أخبرنا|أخبرنى|أخبرني|أنبأنا|أنبأني|نا|ثنا|قرأت على|سمعت|وحدثنا|وحدثني|وحدثناه|وحدثنيه|وأخبرنا|وأخبرني|عن)\b/u;
+  if (chain.test(t)) {
+    const m = t.match(
+      /^[\s\S]{0,600}?(?:قال|قالت|يقول|أنه قال)\s*[:؛]?\s*(?:رسول الله|النبي)?\s*(?:صلى الله عليه وسلم|صلى الله عليه وآله وسلم)?\s*[:؛]?\s*/u,
+    );
+    if (m && m[0].length < original.length - 20) t = original.slice(m[0].length);
+  }
+  t = t.replace(/^(?:رضي الله عنه[ما]?|رحمه الله)\s*[:؛]?\s*/u, "");
+  return (t.trim() || original).trim();
 }
+
 
 const atharUrl = (a: AtharEntry) =>
   `https://dorar.net/hadith/search?q=${encodeURIComponent(a.text.split(" ").slice(0, 7).join(" "))}`;
