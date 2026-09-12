@@ -47,7 +47,7 @@ function Index() {
   const [active, setActive] = useState(CATEGORIES[0]!);
   const [query, setQuery] = useState("");
   const [recent, setRecent] = useState<string[]>([]);
-  const [stats, setStats] = useState<Stats | null>(null);
+  const [stats, setStats] = useState<LiveStats>(EMPTY_LIVE);
   const { theme, toggle } = useTheme();
 
   useEffect(() => {
@@ -57,7 +57,23 @@ function Index() {
     } catch {
       /* ignore */
     }
-    setStats(bumpStats({ visits: 1 }));
+
+    let alive = true;
+    const refresh = () => {
+      void fetchLiveStats().then((s) => {
+        if (alive) setStats(s);
+      });
+    };
+
+    void track("visit").then(refresh);
+    // heartbeat keeps "active now" accurate while the tab stays open
+    const beat = setInterval(() => void track("ping"), 60_000);
+    const poll = setInterval(refresh, 20_000);
+    return () => {
+      alive = false;
+      clearInterval(beat);
+      clearInterval(poll);
+    };
   }, []);
 
   const navigate = useNavigate();
