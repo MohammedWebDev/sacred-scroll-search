@@ -12,10 +12,13 @@ import {
   Eye,
   BookOpen,
   ArrowLeft,
+  Radio,
+  TrendingUp,
 } from "lucide-react";
 import { CATEGORIES } from "@/lib/categories";
 import { useTheme } from "@/lib/theme";
-import { bumpStats, readStats, LIBRARY, type Stats } from "@/lib/stats";
+import { LIBRARY } from "@/lib/stats";
+import { EMPTY_LIVE, fetchLiveStats, track, type LiveStats } from "@/lib/live-stats";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -44,7 +47,7 @@ function Index() {
   const [active, setActive] = useState(CATEGORIES[0]!);
   const [query, setQuery] = useState("");
   const [recent, setRecent] = useState<string[]>([]);
-  const [stats, setStats] = useState<Stats | null>(null);
+  const [stats, setStats] = useState<LiveStats>(EMPTY_LIVE);
   const { theme, toggle } = useTheme();
 
   useEffect(() => {
@@ -54,7 +57,23 @@ function Index() {
     } catch {
       /* ignore */
     }
-    setStats(bumpStats({ visits: 1 }));
+
+    let alive = true;
+    const refresh = () => {
+      void fetchLiveStats().then((s) => {
+        if (alive) setStats(s);
+      });
+    };
+
+    void track("visit").then(refresh);
+    // heartbeat keeps "active now" accurate while the tab stays open
+    const beat = setInterval(() => void track("ping"), 60_000);
+    const poll = setInterval(refresh, 20_000);
+    return () => {
+      alive = false;
+      clearInterval(beat);
+      clearInterval(poll);
+    };
   }, []);
 
   const navigate = useNavigate();
@@ -157,11 +176,19 @@ function Index() {
 
       <main className="mx-auto max-w-5xl px-5 py-10">
         <section>
-          <h2 className="text-xl font-bold text-foreground">إحصائيات المتصفح</h2>
-          <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <StatCard icon={Eye} label="زياراتك" value={stats?.visits ?? 0} />
-            <StatCard icon={Activity} label="عمليات بحثك" value={stats?.searches ?? 0} />
-            <StatCard icon={Users} label="نتائج عُرضت لك" value={stats?.results ?? 0} />
+          <h2 className="flex items-center gap-2 text-xl font-bold text-foreground">
+            إحصائيات المتصفح
+            <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+              <span className="size-1.5 animate-pulse rounded-full bg-primary" />
+              مباشر
+            </span>
+          </h2>
+          <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+            <StatCard icon={Radio} label="نشطون الآن" value={stats.activeNow} />
+            <StatCard icon={Users} label="متوسط الزوار يوميًا" value={stats.dailyAvg} />
+            <StatCard icon={Search} label="عمليات البحث اليوم" value={stats.searchesToday} />
+            <StatCard icon={Activity} label="بحث خلال آخر ساعة" value={stats.searchesHour} />
+            <StatCard icon={Eye} label="إجمالي الزيارات" value={stats.visitsTotal} />
             <StatCard
               icon={BookOpen}
               label="محتوى المكتبة"
@@ -169,8 +196,9 @@ function Index() {
               suffix={`آية · ${LIBRARY.suwar} سورة · ${LIBRARY.books} كتب`}
             />
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            تُحتسب الإحصائيات محليًا على جهازك للحفاظ على خصوصيتك.
+          <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <TrendingUp className="size-3.5 text-primary" />
+            أرقام حقيقية لجميع زوار الموقع، تُحدَّث تلقائيًا كل ٢٠ ثانية وبلا أي بيانات شخصية.
           </p>
         </section>
 

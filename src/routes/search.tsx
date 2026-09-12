@@ -12,6 +12,7 @@ import { Omnibox } from "@/components/Omnibox";
 
 import { useTheme } from "@/lib/theme";
 import { bumpStats } from "@/lib/stats";
+import { track } from "@/lib/live-stats";
 
 type SearchParams = { q: string; cat?: string | undefined; book?: string | undefined };
 
@@ -70,6 +71,10 @@ function SearchPage() {
   useEffect(() => {
     if (data) bumpStats({ searches: 1, results: data.results.length });
   }, [data]);
+
+  useEffect(() => {
+    if (q.trim()) void track("search", q);
+  }, [q]);
 
 
 
