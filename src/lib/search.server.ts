@@ -436,8 +436,6 @@ export function stripIsnad(text: string) {
   return rest || original;
 }
 
-  return (t.trim() || original).trim();
-}
 
 
 const atharUrl = (a: AtharEntry) =>
