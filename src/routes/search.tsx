@@ -71,6 +71,10 @@ function SearchPage() {
     if (data) bumpStats({ searches: 1, results: data.results.length });
   }, [data]);
 
+  useEffect(() => {
+    if (q.trim()) void track("search", q);
+  }, [q]);
+
 
 
   const go = (next: Partial<SearchParams>) =>
