@@ -12,6 +12,7 @@ import { Omnibox } from "@/components/Omnibox";
 
 import { useTheme } from "@/lib/theme";
 import { bumpStats } from "@/lib/stats";
+import { track } from "@/lib/live-stats";
 
 type SearchParams = { q: string; cat?: string | undefined; book?: string | undefined };
 
