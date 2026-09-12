@@ -12,10 +12,13 @@ import {
   Eye,
   BookOpen,
   ArrowLeft,
+  Radio,
+  TrendingUp,
 } from "lucide-react";
 import { CATEGORIES } from "@/lib/categories";
 import { useTheme } from "@/lib/theme";
-import { bumpStats, readStats, LIBRARY, type Stats } from "@/lib/stats";
+import { LIBRARY } from "@/lib/stats";
+import { EMPTY_LIVE, fetchLiveStats, track, type LiveStats } from "@/lib/live-stats";
 
 export const Route = createFileRoute("/")({
   head: () => ({
